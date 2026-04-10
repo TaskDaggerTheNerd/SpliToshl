@@ -83,9 +83,8 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   const [dateFilter, setDateFilter] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [splitFilter, setSplitFilter] = useState('all')
-  const [jointFilter, setJointFilter] = useState('all')
+  const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
+  const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
 
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ date: '', description: '', category: '', amount: '', split: false, jointMode: null,})
@@ -200,28 +199,22 @@ const jointMonthData = useMemo(() => {
     const matchesDate =
       !dateFilter || String(t.date || '').startsWith(dateFilter)
 
-    const matchesCategory =
-      categoryFilter === 'all' || (t.category || 'Other') === categoryFilter
+    const matchesTransactionCategory =
+      transactionCategoryFilter === 'all' ||
+      (t.category || 'Other') === transactionCategoryFilter
 
-    const matchesSplit =
-      splitFilter === 'all' ||
-      (splitFilter === 'yes' && t.split) ||
-      (splitFilter === 'no' && !t.split)
+    return matchesQuery && matchesDate && matchesTransactionCategory
+  })
+}, [myTransactions, query, dateFilter, transactionCategoryFilter])
 
-    const matchesJoint =
-      jointFilter === 'all' ||
-      (jointFilter === 'yes' && t.joint) ||
-      (jointFilter === 'no' && !t.joint)
-
+const overviewFiltered = useMemo(() => {
+  return myTransactions.filter((t) => {
     return (
-      matchesQuery &&
-      matchesDate &&
-      matchesCategory &&
-      matchesSplit &&
-      matchesJoint
+      overviewCategoryFilter === 'all' ||
+      (t.category || 'Other') === overviewCategoryFilter
     )
   })
-}, [myTransactions, query, dateFilter, categoryFilter, splitFilter, jointFilter])
+}, [myTransactions, overviewCategoryFilter])
 
   const sortedTransactions = useMemo(() => {
     const arr = [...filtered]
@@ -316,15 +309,17 @@ function handleJointSort(key) {
 
   const merchantData = useMemo(() => {
   const m = new Map()
-  filtered.forEach(t => {
+
+  overviewFiltered.forEach((t) => {
     const key = t.merchant || t.description || 'Unknown'
-    m.set(key, (m.get(key) || 0) + (Number(t.myAmount) || 0))
+    m.set(key, (m.get(key) || 0) + Number(t.myAmount || 0))
   })
+
   return [...m.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15)
     .map(([name, value]) => ({ name, value }))
-}, [filtered])
+}, [overviewFiltered])
 
   const monthData = useMemo(() => {
   const m = new Map()
@@ -930,7 +925,7 @@ function chooseJointMode(mode) {
         ))}
       </nav>
 
-      <div className="toolbar">
+<div className="toolbar">
   <input
     className="search-input"
     value={query}
@@ -938,62 +933,21 @@ function chooseJointMode(mode) {
     placeholder="Search transactions..."
   />
 
-  <input
-    className="field-input"
-    type="month"
-    value={dateFilter}
-    onChange={(e) => setDateFilter(e.target.value)}
-    title="Filter by month"
-  />
-
-  <select
-    className="field-input"
-    value={categoryFilter}
-    onChange={(e) => setCategoryFilter(e.target.value)}
-    title="Filter by category"
-  >
-    <option value="all">All categories</option>
-    {categoryOptions.map((cat) => (
-      <option key={cat} value={cat}>
-        {cat}
-      </option>
-    ))}
-  </select>
-
-  <select
-    className="field-input"
-    value={splitFilter}
-    onChange={(e) => setSplitFilter(e.target.value)}
-    title="Filter by split"
-  >
-    <option value="all">All split</option>
-    <option value="yes">Split: Yes</option>
-    <option value="no">Split: No</option>
-  </select>
-
-  <select
-    className="field-input"
-    value={jointFilter}
-    onChange={(e) => setJointFilter(e.target.value)}
-    title="Filter by joint"
-  >
-    <option value="all">All joint</option>
-    <option value="yes">Joint: Yes</option>
-    <option value="no">Joint: No</option>
-  </select>
-
-  <button
-    className="btn btn-small"
-    onClick={() => {
-      setQuery('')
-      setDateFilter('')
-      setCategoryFilter('all')
-      setSplitFilter('all')
-      setJointFilter('all')
-    }}
-  >
-    Clear filters
-  </button>
+  {(activeTab === 'Trends' || activeTab === 'Merchants') && (
+    <select
+      className="field-input"
+      value={overviewCategoryFilter}
+      onChange={(e) => setOverviewCategoryFilter(e.target.value)}
+      title="Filter by category"
+    >
+      <option value="all">All categories</option>
+      {categoryOptions.map((cat) => (
+        <option key={cat} value={cat}>
+          {cat}
+        </option>
+      ))}
+    </select>
+  )}
 </div>
 
       {/* ── OWN OVERVIEW ── */}
@@ -1474,15 +1428,57 @@ function chooseJointMode(mode) {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th onClick={() => handleSort('date')}>Date</th>
-                    <th onClick={() => handleSort('description')}>Description</th>
-                    <th onClick={() => handleSort('category')}>Category</th>
-                    <th onClick={() => handleSort('amount')}>Amount</th>
-                    <th>Split</th>
-                    <th>Joint?</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
+                   <th onClick={() => handleSort('date')}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <span>Date</span>
+                      <input
+                        className="field-input"
+                        type="month"
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  </th>
+
+                  <th onClick={() => handleSort('description')}>Description</th>
+
+                  <th onClick={() => handleSort('category')}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <span>Category</span>
+                      <select
+                        className="field-input"
+                        value={transactionCategoryFilter}
+                        onChange={(e) => setTransactionCategoryFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="all">All categories</option>
+                        {categoryOptions.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </th>
+
+                  <th onClick={() => handleSort('amount')}>Amount</th>
+                  <th>Split</th>
+                  <th>Joint?</th>
+                  <th>
+                    <button
+                      className="btn btn-small"
+                      onClick={() => {
+                        setDateFilter('')
+                        setTransactionCategoryFilter('all')
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              
                 <tbody>
                   {sortedTransactions.map(t => {
                     const isEditing = editingId === t.id
