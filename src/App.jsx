@@ -87,12 +87,11 @@ export default function App() {
   const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
 
   const [editingId, setEditingId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ date: '', description: '', category: '', amount: '', split: false, jointMode: null,})
+  const [editDraft, setEditDraft] = useState({ date: '', description: '', category: '', amount: '', split: false, joint: false,})
 
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
-  const [jointPrompt, setJointPrompt] = useState(null)
 
   const fileRef = useRef(null)
   const jsonRef = useRef(null)
@@ -121,9 +120,15 @@ export default function App() {
   // My personal share of every transaction
 const myTransactions = useMemo(
   () =>
-    transactions.map(t => {
+    transactions.map((t) => {
       const amount = Math.abs(Number(t.amount) || 0)
-      return { ...t, myAmount: amount }
+      const isJoint = t.account === 'joint' || t.joint
+      const myAmount = isJoint ? amount / 2 : amount
+
+      return {
+        ...t,
+        myAmount,
+      }
     }),
   [transactions]
 )
@@ -132,20 +137,14 @@ const myTransactions = useMemo(
 const jointTransactions = useMemo(
   () =>
     transactions
-      .filter(t => t.account === 'joint' || t.joint)
-      .map(t => {
+      .filter((t) => t.account === 'joint' || t.joint)
+      .map((t) => {
         const amount = Math.abs(Number(t.amount) || 0)
 
-        let jointAmount = amount
-        if (t.account === 'joint') {
-          jointAmount = amount
-        } else if (t.joint && t.jointMode === 'half') {
-          jointAmount = amount / 2
-        } else if (t.joint && t.jointMode === 'full') {
-          jointAmount = amount
+        return {
+          ...t,
+          jointAmount: amount,
         }
-
-        return { ...t, jointAmount }
       }),
   [transactions]
 )
@@ -624,7 +623,7 @@ function toggleSplit(id) {
 }
 
   function toggleJoint(id) {
-  const tx = transactions.find(t => t.id === id)
+  const tx = transactions.find((t) => t.id === id)
   if (!tx) return
 
   if (tx.account === 'joint') {
@@ -633,8 +632,8 @@ function toggleSplit(id) {
   }
 
   if (tx.joint) {
-    setTransactions(prev =>
-      prev.map(t =>
+    setTransactions((prev) =>
+      prev.map((t) =>
         t.id === id ? { ...t, joint: false, jointMode: null } : t
       )
     )
@@ -642,58 +641,12 @@ function toggleSplit(id) {
     return
   }
 
-  setTransactions(prev =>
-    prev.map(t =>
-      t.id === id ? { ...t, joint: true, jointMode: 'full' } : t
+  setTransactions((prev) =>
+    prev.map((t) =>
+      t.id === id ? { ...t, joint: true, jointMode: null } : t
     )
   )
-  setStatus('Added to Joint tab using full amount.')
-}
-
-
-function chooseJointMode(mode) {
-  if (!jointPrompt?.id) return
-
-  if (mode === 'cancel') {
-    setJointPrompt(null)
-    setStatus('Joint action cancelled.')
-    return
-  }
-
-  setTransactions(prev =>
-    prev.map(t =>
-      t.id === jointPrompt.id
-        ? { ...t, joint: true, jointMode: mode }
-        : t
-    )
-  )
-
-  setStatus(
-    mode === 'half'
-      ? 'Added to Joint tab using half amount.'
-      : 'Added to Joint tab using full amount.'
-  )
-
-  setJointPrompt(null)
-
-
-  const useHalf = window.confirm(
-    'Add this transaction to the Joint tab?\n\nOK = add HALF amount\nCancel = add FULL amount'
-  )
-
-  setTransactions(prev =>
-    prev.map(t =>
-      t.id === id
-        ? { ...t, joint: true, jointMode: useHalf ? 'half' : 'full' }
-        : t
-    )
-  )
-
-  setStatus(
-    useHalf
-      ? 'Added to Joint tab using half amount.'
-      : 'Added to Joint tab using full amount.'
-  )
+  setStatus('Added to Joint tab.')
 }
 
   function startEdit(t) {
@@ -705,14 +658,20 @@ function chooseJointMode(mode) {
     amount: String(t.amount ?? ''),
     split: Boolean(t.split),
     joint: Boolean(t.joint || t.account === 'joint'),
-    jointMode: t.account === 'joint' ? 'full' : (t.jointMode || null),
   })
 }
 
   function cancelEdit() {
-    setEditingId(null)
-    setEditDraft({ date: '', description: '', category: '', amount: '', split: false, jointMode: null, })
-  }
+  setEditingId(null)
+  setEditDraft({
+    date: '',
+    description: '',
+    category: '',
+    amount: '',
+    split: false,
+    joint: false,
+  })
+}
 
   function saveEdit(id) {
   const amount = Number(String(editDraft.amount).replace(',', '.'))
@@ -744,10 +703,7 @@ function chooseJointMode(mode) {
           split: t.splitPaid ? false : Boolean(editDraft.split),
           splitPaid: Boolean(t.splitPaid),
           joint: t.account === 'joint' ? true : Boolean(editDraft.joint),
-          jointMode: t.account === 'joint'
-            ? 'full'
-            : (editDraft.joint ? editDraft.jointMode || 'full' : null),
-        }
+          jointMode: null,}
 
       if (categoryChanged && originalDescription && t.description === originalDescription)
         return { ...t, category: editDraft.category || 'Other' }
@@ -1595,27 +1551,18 @@ function chooseJointMode(mode) {
   {isEditing ? (
     <select
       className="field-input"
-      value={
-        t.account === 'joint'
-          ? 'full'
-          : editDraft.joint
-            ? (editDraft.jointMode || 'full')
-            : 'no'
-      }
-      onChange={(e) => {
-        const v = e.target.value
+      value={(t.account === 'joint' || editDraft.joint) ? 'yes' : 'no'}
+      onChange={(e) =>
         setEditDraft((p) => ({
           ...p,
-          joint: v !== 'no',
-          jointMode: v === 'no' ? null : v,
+          joint: e.target.value === 'yes',
         }))
-      }}
+      }
       disabled={t.account === 'joint'}
       title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
     >
       <option value="no">No</option>
-      <option value="full">Yes full</option>
-      <option value="half">Yes half</option>
+      <option value="yes">Yes</option>
     </select>
   ) : (
     <button
@@ -1624,7 +1571,7 @@ function chooseJointMode(mode) {
       disabled={t.account === 'joint'}
       title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
     >
-      {t.account === 'joint' ? 'Yes' : t.joint ? 'Yes' : 'No'}
+      {(t.joint || t.account === 'joint') ? 'Yes' : 'No'}
     </button>
   )}
 </td>
@@ -1765,39 +1712,6 @@ function chooseJointMode(mode) {
           </div>
         </div>
       )}
-
-      {/* Joint amount modal */}
-      {jointPrompt && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h3>Add this expense to the Joint tab?</h3>
-            <p>
-              Choose how this expense should count in the <strong>Joint</strong> tab.
-            </p>
-            <div className="modal-actions">
-              <button
-                className="btn btn-modal"
-                onClick={() => chooseJointMode('full')}
-              >
-                Full
-              </button>
-              <button
-                className="btn btn-modal"
-                onClick={() => chooseJointMode('half')}
-              >
-                Half
-              </button>
-              <button
-                className="btn btn-modal btn-cancel"
-                onClick={() => chooseJointMode('cancel')}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }
