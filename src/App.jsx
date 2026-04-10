@@ -547,13 +547,14 @@ async function handleJSON(file) {
   setStatus('All data cleared.')
 }
 
-  function markAllSplitsPaid() {
+function markAllSplitsPaid() {
   let changed = 0
+
   setTransactions(prev =>
     prev.map(t => {
       if (t.split) {
         changed++
-        return { ...t, split: false }
+        return { ...t, split: false, splitPaid: true }
       }
       return t
     })
@@ -566,12 +567,20 @@ async function handleJSON(file) {
   }
 }
 
-  function toggleSplit(id) {
-    setTransactions(prev =>
-      prev.map(t => (t.id === id ? { ...t, split: !t.split } : t))
-    )
-    setStatus('Split updated.')
+function toggleSplit(id) {
+  const tx = transactions.find(t => t.id === id)
+  if (!tx) return
+
+  if (tx.splitPaid) {
+    setStatus('This transaction was already split and paid in the past.')
+    return
   }
+
+  setTransactions(prev =>
+    prev.map(t => (t.id === id ? { ...t, split: !t.split } : t))
+  )
+  setStatus('Split updated.')
+}
 
   function toggleJoint(id) {
   const tx = transactions.find(t => t.id === id)
@@ -691,7 +700,8 @@ function chooseJointMode(mode) {
           merchant: editDraft.description.trim() || t.merchant,
           category: editDraft.category || 'Other',
           amount,
-          split: Boolean(editDraft.split),
+          split: t.splitPaid ? false : Boolean(editDraft.split),
+          splitPaid: Boolean(t.splitPaid),
           joint: Boolean(editDraft.joint),
           jointMode: editDraft.joint ? editDraft.jointMode || 'full' : null,
         }
@@ -1372,21 +1382,24 @@ function chooseJointMode(mode) {
                   {sortedTransactions.map(t => {
                     const isEditing = editingId === t.id
                     return (
-                      <tr key={t.id} className={`${t.split ? 'split-row' : ''} ${isEditing ? 'editing-row' : ''}`}>
-  <td>
-    {isEditing ? (
-      <input
-        className="field-input"
-        type="date"
-        value={editDraft.date}
-        onChange={e => setEditDraft(p => ({ ...p, date: e.target.value }))}
-      />
-    ) : (
-      t.date
-    )}
-  </td>
+                      <tr
+                        key={t.id}
+                          className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''} ${isEditing ? 'editing-row' : ''}`.trim()}
+                          >
+                            <td>
+                              {isEditing ? (
+                              <input
+                              className="field-input"
+                              type="date"
+                              value={editDraft.date}
+                              onChange={e => setEditDraft(p => ({ ...p, date: e.target.value }))}
+                              />
+                                ) : (
+                                t.date
+                                )}
+                            </td>
 
-  <td>
+                          <td>
     {isEditing ? (
       <input
         className="field-input"
@@ -1403,16 +1416,15 @@ function chooseJointMode(mode) {
   <td>
     {isEditing ? (
       <select
-        className="field-input"
-        value={editDraft.category}
-        onChange={e => setEditDraft(p => ({ ...p, category: e.target.value }))}
-      >
-        {categoryOptions.map(cat => (
-          <option key={cat} value={cat}>
-            {cat}
-          </option>
-        ))}
-      </select>
+  className="field-input"
+  value={editDraft.split ? 'yes' : 'no'}
+  onChange={e => setEditDraft(p => ({ ...p, split: e.target.value === 'yes' }))}
+  disabled={Boolean(transactions.find(x => x.id === t.id)?.splitPaid)}
+  title={transactions.find(x => x.id === t.id)?.splitPaid ? 'Already split and paid in the past' : ''}
+>
+  <option value="no">No</option>
+  <option value="yes">Yes</option>
+</select>
     ) : (
       t.category
     )}
@@ -1444,12 +1456,32 @@ function chooseJointMode(mode) {
         <option value="yes">Yes</option>
       </select>
     ) : (
-      <button
-        className={`btn btn-split${t.split ? ' yes' : ''}`}
-        onClick={() => toggleSplit(t.id)}
-      >
-        {t.split ? 'Yes' : 'No'}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+  <button
+    className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'disabled' : ''}`}
+    onClick={() => toggleSplit(t.id)}
+    disabled={t.splitPaid}
+    title={t.splitPaid ? 'Already split and paid in the past' : ''}
+  >
+    {t.split ? 'Yes' : 'No'}
+  </button>
+
+  {t.splitPaid && (
+    <span
+      style={{
+        fontSize: '0.72rem',
+        padding: '0.2rem 0.45rem',
+        borderRadius: '999px',
+        background: 'var(--color-warning-highlight)',
+        color: 'var(--color-warning)',
+        whiteSpace: 'nowrap',
+        fontWeight: 600,
+      }}
+    >
+      Paid split
+    </span>
+  )}
+</div>
     )}
   </td>
 
