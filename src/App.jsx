@@ -1106,27 +1106,29 @@ function chooseJointMode(mode) {
             </div>
 
             <div className="panel">
-              <h2>Joint Summary</h2>
-              <div className="table-wrap">
-                <table className="data-table">
-                  <tbody>
-                    <tr>
-                      <td>Total Joint Spend</td>
-                      <td className="amount">{fmtEUR(jointTotal)}</td>
-                    </tr>
-                    <tr>
-                      <td>Transactions</td>
-                      <td className="amount">{jointTransactions.length}</td>
-                    </tr>
-                    <tr>
-                      <td>Categories</td>
-                      <td className="amount">{jointCategoryData.length}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+  <h2>Joint Summary</h2>
+  <div className="table-wrap">
+    <table className="data-table">
+      <tbody>
+        <tr>
+          <td>Total Joint Spend</td>
+          <td className="amount">{fmtEUR(jointTotal)}</td>
+        </tr>
+        <tr>
+          <td>Transactions</td>
+          <td className="amount">{jointTransactions.length}</td>
+        </tr>
+        {jointCategoryData.map((row) => (
+          <tr key={row.name}>
+            <td>{row.name}</td>
+            <td className="amount">{fmtEUR(row.value)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
         ))}
 
       {/* ── TRENDS ── */}
@@ -1478,7 +1480,7 @@ function chooseJointMode(mode) {
                   </th>
                 </tr>
               </thead>
-              
+
                 <tbody>
                   {sortedTransactions.map(t => {
                     const isEditing = editingId === t.id
