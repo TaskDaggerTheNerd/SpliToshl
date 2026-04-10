@@ -171,8 +171,7 @@ const jointTotal = useMemo(() => {
         !dateFilter || String(t.date || '').startsWith(dateFilter)
 
       const matchesCategory =
-        transactionCategoryFilter === 'all' ||
-        (t.category || 'Other') === transactionCategoryFilter
+  categoryFilter === 'all' || (t.category || 'Other') === categoryFilter
 
       return matchesQuery && matchesDate && matchesCategory
     })
