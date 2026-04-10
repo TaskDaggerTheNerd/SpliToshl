@@ -500,21 +500,28 @@ function finishImport(rows, label, accountType) {
   const normalized = dedup(normalizeTransactions(rows))
 
   if (normalized.length === 0) {
-    setStatus('⚠️ No transactions found. Check file columns.')
+    setStatus('No transactions found. Check file columns.')
     setPendingImport(null)
     return
   }
 
-  const enriched = normalized.map(t => ({
+  const enriched = normalized.map((t) => ({
     ...t,
     account: t.account || (isJoint ? 'joint' : 'personal'),
     split: t.account ? Boolean(t.split) : false,
+    joint: t.account === 'joint' ? true : (isJoint ? true : Boolean(t.joint)),
+    jointMode:
+      t.account === 'joint'
+        ? 'full'
+        : isJoint
+          ? 'full'
+          : (t.joint ? (t.jointMode || 'full') : null),
   }))
 
   const merged = dedup([...transactions, ...enriched])
 
   if (merged.length === transactions.length) {
-    setStatus(`No new transactions found in ${label} (all duplicates).`)
+    setStatus(`No new transactions found in ${label}; all were duplicates.`)
     setPendingImport(null)
     return
   }
@@ -695,17 +702,17 @@ function chooseJointMode(mode) {
 }
 
   function startEdit(t) {
-    setEditingId(t.id)
-    setEditDraft({
-      date: t.date || '',
-      description: t.description || '',
-      category: t.category || 'Other',
-      amount: String(t.amount ?? ''),
-      split: Boolean(t.split),
-      joint: Boolean(t.joint),
-      jointMode: t.jointMode || null,
-    })
-  }
+  setEditingId(t.id)
+  setEditDraft({
+    date: t.date,
+    description: t.description,
+    category: t.category || 'Other',
+    amount: String(t.amount ?? ''),
+    split: Boolean(t.split),
+    joint: Boolean(t.joint || t.account === 'joint'),
+    jointMode: t.account === 'joint' ? 'full' : (t.jointMode || null),
+  })
+}
 
   function cancelEdit() {
     setEditingId(null)
@@ -741,8 +748,10 @@ function chooseJointMode(mode) {
           amount,
           split: t.splitPaid ? false : Boolean(editDraft.split),
           splitPaid: Boolean(t.splitPaid),
-          joint: Boolean(editDraft.joint),
-          jointMode: editDraft.joint ? editDraft.jointMode || 'full' : null,
+          joint: t.account === 'joint' ? true : Boolean(editDraft.joint),
+          jointMode: t.account === 'joint'
+            ? 'full'
+            : (editDraft.joint ? editDraft.jointMode || 'full' : null),
         }
 
       if (categoryChanged && originalDescription && t.description === originalDescription)
@@ -1585,33 +1594,42 @@ function chooseJointMode(mode) {
   </td>
 
   <td>
-    {isEditing ? (
-      <select
-        className="field-input"
-        value={editDraft.joint ? (editDraft.jointMode || 'full') : 'no'}
-        onChange={e => {
-          const v = e.target.value
-          setEditDraft(p => ({
-            ...p,
-            joint: v !== 'no',
-            jointMode: v === 'no' ? null : v,
-          }))
-        }}
-        disabled={t.account === 'joint'}
-      >
-        <option value="no">No</option>
-        <option value="full">Yes (full)</option>
-        <option value="half">Yes (half)</option>
-      </select>
-    ) : (
-      <button
-  className={`btn btn-split ${t.joint ? 'yes' : ''}`}
-  onClick={() => toggleJoint(t.id)}
->
-  {t.joint ? 'Yes' : 'No'}
-</button>
-    )}
-  </td>
+  {isEditing ? (
+    <select
+      className="field-input"
+      value={
+        t.account === 'joint'
+          ? 'full'
+          : editDraft.joint
+            ? (editDraft.jointMode || 'full')
+            : 'no'
+      }
+      onChange={(e) => {
+        const v = e.target.value
+        setEditDraft((p) => ({
+          ...p,
+          joint: v !== 'no',
+          jointMode: v === 'no' ? null : v,
+        }))
+      }}
+      disabled={t.account === 'joint'}
+      title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
+    >
+      <option value="no">No</option>
+      <option value="full">Yes full</option>
+      <option value="half">Yes half</option>
+    </select>
+  ) : (
+    <button
+      className={`btn btn-split ${(t.joint || t.account === 'joint') ? 'yes' : ''}`}
+      onClick={() => toggleJoint(t.id)}
+      disabled={t.account === 'joint'}
+      title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
+    >
+      {t.account === 'joint' ? 'Yes' : t.joint ? 'Yes' : 'No'}
+    </button>
+  )}
+</td>
 
   <td>
     <div className="row-actions">
