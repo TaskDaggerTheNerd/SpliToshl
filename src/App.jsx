@@ -503,26 +503,24 @@ async function handleJSON(file) {
   setStatus('All data cleared.')
 }
 
-  function markCurrentMonthPaid() {
-    const now = new Date()
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    let changed = 0
-    setTransactions(prev =>
-      prev.map(t => {
-        const month = getMonthKey(t.date)
-        if (t.split && month === currentMonth) {
-          changed++
-          return { ...t, split: false }
-        }
-        return t
-      })
-    )
-    if (changed === 0) {
-      setStatus('No split transactions to mark as paid this month.')
-    } else {
-      setStatus(`Marked ${changed} split transaction(s) as paid for ${currentMonth}.`)
-    }
+  function markAllSplitsPaid() {
+  let changed = 0
+  setTransactions(prev =>
+    prev.map(t => {
+      if (t.split) {
+        changed++
+        return { ...t, split: false }
+      }
+      return t
+    })
+  )
+
+  if (changed === 0) {
+    setStatus('No split transactions to mark as paid.')
+  } else {
+    setStatus(`Marked ${changed} split transactions as paid.`)
   }
+}
 
   function toggleSplit(id) {
     setTransactions(prev =>
@@ -1496,9 +1494,9 @@ function chooseJointMode(mode) {
                 <h2>Monthly Split Balance</h2>
                 <button
                   className="btn btn-small btn-primary"
-                  onClick={markCurrentMonthPaid}
+                  onClick={markAllSplitsPaid}
                 >
-                  Paid this month
+                  Paid
                 </button>
               </div>
               <p className="subtle-note">
