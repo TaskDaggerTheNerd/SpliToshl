@@ -149,34 +149,20 @@ const jointTransactions = useMemo(
   [transactions]
 )
 
-const jointTotal = useMemo(() => {
-  const q = query.trim().toLowerCase()
+const jointTotal = useMemo(
+  () => jointTransactions.reduce((s, t) => s + Number(t.jointAmount || 0), 0),
+  [jointTransactions]
+)
 
-  return jointTransactions
-    .filter((t) => {
-      const matchesQuery =
-        !q ||
-        [
-          t.description,
-          t.merchant,
-          t.category,
-          t.date,
-          String(t.amount),
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
-
-      const matchesDate =
-        !dateFilter || String(t.date || '').startsWith(dateFilter)
-
-      const matchesCategory =
-  categoryFilter === 'all' || (t.category || 'Other') === categoryFilter
-
-      return matchesQuery && matchesDate && matchesCategory
-    })
-    .reduce((s, t) => s + Number(t.jointAmount || 0), 0)
-}, [jointTransactions, query, dateFilter, transactionCategoryFilter])
+const jointCategoryData = useMemo(() => {
+  const m = new Map()
+  jointTransactions.forEach(t => {
+    m.set(t.category, (m.get(t.category) || 0) + Number(t.jointAmount || 0))
+  })
+  return [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value]) => ({ name, value }))
+}, [jointTransactions])
 
 const jointMonthData = useMemo(() => {
   const m = new Map()
@@ -873,7 +859,7 @@ function toggleSplit(id) {
           <div className="value">{categoryData.length}</div>
         </div>
         <div className="kpi-card">
-  <div className="label">Joint Spend</div>
+  <div className="label">Joint Spend (full)</div>
   <div className="value">{fmtEUR(jointTotal)}</div>
 </div>
         <div className="kpi-card accent">
