@@ -86,6 +86,7 @@ export default function App() {
   const [editDraft, setEditDraft] = useState({ date: '', description: '', category: '', amount: '', split: false, jointMode: null,})
 
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' })
+  const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
   const [jointPrompt, setJointPrompt] = useState(null)
 
@@ -215,6 +216,49 @@ const jointMonthData = useMemo(() => {
       return { key, direction: key === 'date' ? 'desc' : 'asc' }
     })
   }
+
+  const sortedJointTransactions = useMemo(() => {
+  const arr = [...jointTransactions]
+  const { key, direction } = jointSortConfig
+  const dir = direction === 'asc' ? 1 : -1
+
+  arr.sort((a, b) => {
+    if (key === 'amount') {
+      const av = Number(a.jointAmount ?? a.amount ?? 0)
+      const bv = Number(b.jointAmount ?? b.amount ?? 0)
+      return (av - bv) * dir
+    }
+
+    if (key === 'date') {
+      const av = a.date || ''
+      const bv = b.date || ''
+      if (av < bv) return -1 * dir
+      if (av > bv) return 1 * dir
+      return 0
+    }
+
+    const av = (a[key] ?? '').toString().toLowerCase()
+    const bv = (b[key] ?? '').toString().toLowerCase()
+    return av.localeCompare(bv) * dir
+  })
+
+  return arr
+}, [jointTransactions, jointSortConfig])
+
+function handleJointSort(key) {
+  setJointSortConfig(prev => {
+    if (prev.key === key) {
+      return {
+        key,
+        direction: prev.direction === 'asc' ? 'desc' : 'asc',
+      }
+    }
+    return {
+      key,
+      direction: key === 'date' ? 'desc' : 'asc',
+    }
+  })
+}
 
   const myTotalSpend = useMemo(
   () => filtered.reduce((s, t) => s + (Number(t.myAmount) || 0), 0),
@@ -972,21 +1016,21 @@ function chooseJointMode(mode) {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th>Category</th>
-                      <th>Amount</th>
+                      <th onClick={() => handleJointSort('date')}>Date</th>
+                      <th onClick={() => handleJointSort('description')}>Description</th>
+                      <th onClick={() => handleJointSort('category')}>Category</th>
+                      <th onClick={() => handleJointSort('amount')}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {jointTransactions.map(t => (
+                    {sortedJointTransactions.map(t => (
                       <tr key={t.id}>
                         <td>{t.date}</td>
                         <td>{t.description}</td>
                         <td>{t.category}</td>
-                        <td className="amount">{fmtEUR(t.amount || 0)}</td>
+                        <td className="amount">{fmtEUR(t.jointAmount || 0)}</td>
                       </tr>
-                    ))}
+                     ))}
                   </tbody>
                 </table>
               </div>
