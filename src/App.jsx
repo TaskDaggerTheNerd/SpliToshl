@@ -82,6 +82,11 @@ export default function App() {
   const [status, setStatus] = useState('Import a CSV or Excel (.xlsx) file to start.')
   const [darkMode, setDarkMode] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
 
+  const [dateFilter, setDateFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [splitFilter, setSplitFilter] = useState('all')
+  const [jointFilter, setJointFilter] = useState('all')
+
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ date: '', description: '', category: '', amount: '', split: false, jointMode: null,})
 
@@ -177,12 +182,46 @@ const jointMonthData = useMemo(() => {
   // Filtered list (using my share)
   const filtered = useMemo(() => {
   const q = query.trim().toLowerCase()
-  if (!q) return myTransactions
-  return myTransactions.filter(t =>
-    [t.description, t.merchant, t.category, t.date, String(t.amount)]
-      .join(' ').toLowerCase().includes(q)
-  )
-}, [myTransactions, query])
+
+  return myTransactions.filter((t) => {
+    const matchesQuery =
+      !q ||
+      [
+        t.description,
+        t.merchant,
+        t.category,
+        t.date,
+        String(t.amount),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+
+    const matchesDate =
+      !dateFilter || String(t.date || '').startsWith(dateFilter)
+
+    const matchesCategory =
+      categoryFilter === 'all' || (t.category || 'Other') === categoryFilter
+
+    const matchesSplit =
+      splitFilter === 'all' ||
+      (splitFilter === 'yes' && t.split) ||
+      (splitFilter === 'no' && !t.split)
+
+    const matchesJoint =
+      jointFilter === 'all' ||
+      (jointFilter === 'yes' && t.joint) ||
+      (jointFilter === 'no' && !t.joint)
+
+    return (
+      matchesQuery &&
+      matchesDate &&
+      matchesCategory &&
+      matchesSplit &&
+      matchesJoint
+    )
+  })
+}, [myTransactions, query, dateFilter, categoryFilter, splitFilter, jointFilter])
 
   const sortedTransactions = useMemo(() => {
     const arr = [...filtered]
@@ -883,13 +922,70 @@ function chooseJointMode(mode) {
       </nav>
 
       <div className="toolbar">
-        <input
-          className="search-input"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search transactions..."
-        />
-      </div>
+  <input
+    className="search-input"
+    value={query}
+    onChange={(e) => setQuery(e.target.value)}
+    placeholder="Search transactions..."
+  />
+
+  <input
+    className="field-input"
+    type="month"
+    value={dateFilter}
+    onChange={(e) => setDateFilter(e.target.value)}
+    title="Filter by month"
+  />
+
+  <select
+    className="field-input"
+    value={categoryFilter}
+    onChange={(e) => setCategoryFilter(e.target.value)}
+    title="Filter by category"
+  >
+    <option value="all">All categories</option>
+    {categoryOptions.map((cat) => (
+      <option key={cat} value={cat}>
+        {cat}
+      </option>
+    ))}
+  </select>
+
+  <select
+    className="field-input"
+    value={splitFilter}
+    onChange={(e) => setSplitFilter(e.target.value)}
+    title="Filter by split"
+  >
+    <option value="all">All split</option>
+    <option value="yes">Split: Yes</option>
+    <option value="no">Split: No</option>
+  </select>
+
+  <select
+    className="field-input"
+    value={jointFilter}
+    onChange={(e) => setJointFilter(e.target.value)}
+    title="Filter by joint"
+  >
+    <option value="all">All joint</option>
+    <option value="yes">Joint: Yes</option>
+    <option value="no">Joint: No</option>
+  </select>
+
+  <button
+    className="btn btn-small"
+    onClick={() => {
+      setQuery('')
+      setDateFilter('')
+      setCategoryFilter('all')
+      setSplitFilter('all')
+      setJointFilter('all')
+    }}
+  >
+    Clear filters
+  </button>
+</div>
 
       {/* ── OWN OVERVIEW ── */}
       {activeTab === 'Own' &&
@@ -1414,21 +1510,24 @@ function chooseJointMode(mode) {
   </td>
 
   <td>
-    {isEditing ? (
-      <select
-  className="field-input"
-  value={editDraft.split ? 'yes' : 'no'}
-  onChange={e => setEditDraft(p => ({ ...p, split: e.target.value === 'yes' }))}
-  disabled={Boolean(transactions.find(x => x.id === t.id)?.splitPaid)}
-  title={transactions.find(x => x.id === t.id)?.splitPaid ? 'Already split and paid in the past' : ''}
->
-  <option value="no">No</option>
-  <option value="yes">Yes</option>
-</select>
-    ) : (
-      t.category
-    )}
-  </td>
+  {isEditing ? (
+    <select
+      className="field-input"
+      value={editDraft.category}
+      onChange={(e) =>
+        setEditDraft((p) => ({ ...p, category: e.target.value }))
+      }
+    >
+      {categoryOptions.map((cat) => (
+        <option key={cat} value={cat}>
+          {cat}
+        </option>
+      ))}
+    </select>
+  ) : (
+    t.category
+  )}
+</td>
 
   <td className="amount">
     {isEditing ? (
