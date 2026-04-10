@@ -149,10 +149,35 @@ const jointTransactions = useMemo(
   [transactions]
 )
 
-const jointTotal = useMemo(
-  () => jointTransactions.reduce((s, t) => s + Number(t.jointAmount || 0), 0),
-  [jointTransactions]
-)
+const jointTotal = useMemo(() => {
+  const q = query.trim().toLowerCase()
+
+  return jointTransactions
+    .filter((t) => {
+      const matchesQuery =
+        !q ||
+        [
+          t.description,
+          t.merchant,
+          t.category,
+          t.date,
+          String(t.amount),
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+
+      const matchesDate =
+        !dateFilter || String(t.date || '').startsWith(dateFilter)
+
+      const matchesCategory =
+        transactionCategoryFilter === 'all' ||
+        (t.category || 'Other') === transactionCategoryFilter
+
+      return matchesQuery && matchesDate && matchesCategory
+    })
+    .reduce((s, t) => s + Number(t.jointAmount || 0), 0)
+}, [jointTransactions, query, dateFilter, transactionCategoryFilter])
 
 const jointCategoryData = useMemo(() => {
   const m = new Map()
