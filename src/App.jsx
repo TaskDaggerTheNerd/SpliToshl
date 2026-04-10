@@ -548,8 +548,14 @@ async function handleJSON(file) {
     return
   }
 
-  setJointPrompt({ id })
+  setTransactions(prev =>
+    prev.map(t =>
+      t.id === id ? { ...t, joint: true, jointMode: 'full' } : t
+    )
+  )
+  setStatus('Added to Joint tab using full amount.')
 }
+
 
 function chooseJointMode(mode) {
   if (!jointPrompt?.id) return
@@ -1424,23 +1430,11 @@ function chooseJointMode(mode) {
       </select>
     ) : (
       <button
-        className={`btn btn-split${t.joint || t.account === 'joint' ? ' yes' : ''}`}
-        onClick={() => toggleJoint(t.id)}
-        disabled={t.account === 'joint'}
-        title={
-          t.account === 'joint'
-            ? 'Already from Joint statement'
-            : t.joint
-            ? `In Joint tab (${t.jointMode || 'full'})`
-            : 'Add to Joint tab'
-        }
-      >
-        {t.account === 'joint'
-          ? 'Yes'
-          : t.joint
-          ? `Yes (${t.jointMode || 'full'})`
-          : 'No'}
-      </button>
+  className={`btn btn-split ${t.joint ? 'yes' : ''}`}
+  onClick={() => toggleJoint(t.id)}
+>
+  {t.joint ? 'Yes' : 'No'}
+</button>
     )}
   </td>
 
