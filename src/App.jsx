@@ -1458,12 +1458,12 @@ function chooseJointMode(mode) {
     ) : (
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
   <button
-    className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'disabled' : ''}`}
+    className={`btn btn-split ${(t.split || t.splitPaid) ? 'yes' : ''} ${t.splitPaid ? 'disabled' : ''}`}
     onClick={() => toggleSplit(t.id)}
     disabled={t.splitPaid}
     title={t.splitPaid ? 'Already split and paid in the past' : ''}
   >
-    {t.split ? 'Yes' : 'No'}
+    {(t.split || t.splitPaid) ? 'Yes' : 'No'}
   </button>
 
   {t.splitPaid && (
@@ -1478,7 +1478,7 @@ function chooseJointMode(mode) {
         fontWeight: 600,
       }}
     >
-      Paid split
+      Already Paid
     </span>
   )}
 </div>
