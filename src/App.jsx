@@ -523,9 +523,9 @@ async function handleJSON(file) {
   }
 
   function handlePDF() {
-    generatePDFReport(transactions, forecast, splitRows, splitTotal)
-    setStatus('PDF downloaded.')
-  }
+  generatePDFReport(transactions)
+  setStatus('PDF downloaded.')
+}
 
   function handleClear() {
   if (!transactions.length) {
