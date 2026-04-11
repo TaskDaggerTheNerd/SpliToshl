@@ -14,11 +14,35 @@ export const DEFAULT_CATEGORIES = [
   'Sports',
 ]
 
+const EUR_FORMATTER = new Intl.NumberFormat('pt-PT', {
+  style: 'currency',
+  currency: 'EUR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+const NUMBER_FORMATTER = new Intl.NumberFormat('pt-PT', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+const INTEGER_FORMATTER = new Intl.NumberFormat('pt-PT', {
+  maximumFractionDigits: 0,
+})
+
 export function fmtEUR(v) {
+  return EUR_FORMATTER.format(Number(v || 0))
+}
+
+export function fmtNumber(v, decimals = 2) {
   return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: 'EUR',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   }).format(Number(v || 0))
+}
+
+export function fmtInt(v) {
+  return INTEGER_FORMATTER.format(Number(v || 0))
 }
 
 export function r2(v) {

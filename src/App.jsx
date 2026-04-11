@@ -868,7 +868,7 @@ function toggleSplit(id) {
 </div>
         <div className="kpi-card">
           <div className="label">Transactions</div>
-          <div className="value">{filtered.length}</div>
+          <div className="value">{fmtInt(filtered.length)}</div>
         </div>
         <div className="kpi-card">
           <div className="label">Categories</div>
@@ -922,6 +922,7 @@ function toggleSplit(id) {
   )}
 </div>
 
+{/* ── OWN OVERVIEW ── */}
 {activeTab === 'Own' &&
   (!hasData ? (
     <EmptyState />
@@ -938,7 +939,7 @@ function toggleSplit(id) {
                 nameKey="name"
                 outerRadius={90}
                 label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
+                  `${name} ${fmtNumber(percent * 100, 0)}%`
                 }
               >
                 {categoryData.map((d) => (
