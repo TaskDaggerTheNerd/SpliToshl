@@ -149,58 +149,69 @@ const jointTransactions = useMemo(
   [transactions]
 )
 
-const jointTotal = useMemo(() => {
+const filteredJointTransactions = useMemo(() => {
   const q = query.trim().toLowerCase()
 
-  return jointTransactions
-    .filter((t) => {
-      const matchesQuery =
-        !q ||
-        [
-          t.description,
-          t.merchant,
-          t.category,
-          t.date,
-          String(t.amount),
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(q)
+  return jointTransactions.filter((t) => {
+    const matchesQuery =
+      !q ||
+      [
+        t.description,
+        t.merchant,
+        t.category,
+        t.date,
+        String(t.amount),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
 
-      const matchesDate =
-        !dateFilter || String(t.date || '').startsWith(dateFilter)
+    const matchesDate =
+      !dateFilter || String(t.date || '').startsWith(dateFilter)
 
-      const matchesCategory =
-        transactionCategoryFilter === 'all' ||
-        (t.category || 'Other') === transactionCategoryFilter
+    const matchesCategory =
+      transactionCategoryFilter === 'all' ||
+      (t.category || 'Other') === transactionCategoryFilter
 
-      return matchesQuery && matchesDate && matchesCategory
-    })
-    .reduce((s, t) => s + Number(t.jointAmount || 0), 0)
+    return matchesQuery && matchesDate && matchesCategory
+  })
 }, [jointTransactions, query, dateFilter, transactionCategoryFilter])
+
+const jointTotal = useMemo(
+  () =>
+    filteredJointTransactions.reduce(
+      (s, t) => s + Number(t.jointAmount || 0),
+      0
+    ),
+  [filteredJointTransactions]
+)
 
 const jointCategoryData = useMemo(() => {
   const m = new Map()
-  jointTransactions.forEach(t => {
+
+  filteredJointTransactions.forEach((t) => {
     m.set(t.category, (m.get(t.category) || 0) + Number(t.jointAmount || 0))
   })
+
   return [...m.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({ name, value }))
-}, [jointTransactions])
+}, [filteredJointTransactions])
 
 const jointMonthData = useMemo(() => {
   const m = new Map()
-  jointTransactions.forEach(t => {
-    const key = String(t.date || '').slice(0, 7)
-    if (key.length >= 7) {
+
+  filteredJointTransactions.forEach((t) => {
+    const key = String(t.date).slice(0, 7)
+    if (key.length === 7) {
       m.set(key, (m.get(key) || 0) + Number(t.jointAmount || 0))
     }
   })
+
   return [...m.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([name, value]) => ({ name, value }))
-}, [jointTransactions])
+}, [filteredJointTransactions])
 
   // Filtered list (using my share)
   const filtered = useMemo(() => {
@@ -274,7 +285,7 @@ const overviewFiltered = useMemo(() => {
   }
 
   const sortedJointTransactions = useMemo(() => {
-  const arr = [...jointTransactions]
+  const arr = [...filteredJointTransactions]
   const { key, direction } = jointSortConfig
   const dir = direction === 'asc' ? 1 : -1
 
@@ -286,8 +297,8 @@ const overviewFiltered = useMemo(() => {
     }
 
     if (key === 'date') {
-      const av = a.date || ''
-      const bv = b.date || ''
+      const av = a.date
+      const bv = b.date
       if (av < bv) return -1 * dir
       if (av > bv) return 1 * dir
       return 0
@@ -299,7 +310,7 @@ const overviewFiltered = useMemo(() => {
   })
 
   return arr
-}, [jointTransactions, jointSortConfig])
+}, [filteredJointTransactions, jointSortConfig])
 
 function handleJointSort(key) {
   setJointSortConfig(prev => {
@@ -1061,7 +1072,7 @@ function toggleSplit(id) {
             </div>
 
             <div className="panel">
-              <h2>Joint Transactions ({jointTransactions.length})</h2>
+              <h2>Joint Transactions {sortedJointTransactions.length}</h2>
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
@@ -1097,7 +1108,7 @@ function toggleSplit(id) {
         </tr>
         <tr>
           <td>Transactions</td>
-          <td className="amount">{jointTransactions.length}</td>
+          <td className="amount">{filteredJointTransactions.length}</td>
         </tr>
         {jointCategoryData.map((row) => (
           <tr key={row.name}>
