@@ -6,7 +6,14 @@ import {
   PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts'
 import {
-  normalizeTransactions, dedup, fmtEUR, buildForecast, buildSplitSummary, DEFAULT_CATEGORIES
+  normalizeTransactions,
+  dedup,
+  fmtEUR,
+  fmtInt,
+  fmtNumber,
+  buildForecast,
+  buildSplitSummary,
+  DEFAULTCATEGORIES,
 } from './utils'
 import { saveToIDB, loadFromIDB, exportJSON, importJSON } from './storage'
 import { generatePDFReport } from './report'
