@@ -511,7 +511,7 @@ function handleJointSort(key) {
 
     const categoryOptions = useMemo(() => {
     const existing = [...new Set(transactions.map(t => t.category).filter(Boolean))]
-    return [...new Set([...DEFAULT_CATEGORIES, ...existing])].sort((a, b) => a.localeCompare(b))
+    return [...new Set([...DEFAULTCATEGORIES, ...existing])].sort((a, b) => a.localeCompare(b))
   }, [transactions])
 
   const getCategoryColor = (name) => {
