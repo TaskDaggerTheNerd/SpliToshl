@@ -804,26 +804,6 @@ function toggleSplit(id) {
     )
   }, [forecastByCategory])
 
-  const overviewRecentCategoryData = useMemo(() => {
-    const m = new Map()
-    const months = [...new Set(transactions.map(t => getMonthKey(t.date)).filter(Boolean))].sort()
-    const last3 = months.slice(-3)
-    const last3Set = new Set(last3)
-    if (!last3.length) return []
-    transactions.forEach(t => {
-      const month = getMonthKey(t.date)
-      if (!month || !last3Set.has(month)) return
-      const cat = t.category || 'Other'
-      m.set(cat, (m.get(cat) || 0) + Math.abs(Number(t.amount) || 0))
-    })
-    return [...m.entries()].map(([name, value]) => ({ name, value }))
-  }, [transactions])
-
-  const overviewProjectedCategoryData = useMemo(
-    () => forecastByCategory.map(row => ({ name: row.category, value: row.projected3 })),
-    [forecastByCategory]
-  )
-
   const tt = {
     contentStyle: {
       background: 'var(--color-surface)',
@@ -967,52 +947,59 @@ function toggleSplit(id) {
                 </PieChart>
               </ResponsiveContainer>
 
-              {overviewRecentCategoryData.length > 0 && (
-                <>
-                  <p className="subtle-note" style={{ marginTop: '1.5rem' }}>
-                    Last 3 months vs projected next 3 months by category.
-                  </p>
-                  <div className="grid-2">
-                    <ResponsiveContainer width="100%" height={260}>
-                      <PieChart>
-                        <Pie
-                          data={overviewRecentCategoryData}
-                          dataKey="value"
-                          nameKey="name"
-                          outerRadius={90}
-                          label={({ name, percent }) =>
-                            `${name} ${(percent * 100).toFixed(0)}%`
-                          }
-                        >
-                          {overviewRecentCategoryData.map(d => (
-                            <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                          ))}
-                        </Pie>
-                        <Tooltip {...tt} />
-                      </PieChart>
-                    </ResponsiveContainer>
+              <div className="panel">
+  <h2>Own Transactions {sortedTransactions.length}</h2>
+  <div className="table-wrap">
+    <table className="data-table">
+      <thead>
+        <tr>
+          <th onClick={() => handleSort('date')}>Date</th>
+          <th onClick={() => handleSort('description')}>Description</th>
+          <th onClick={() => handleSort('category')}>Category</th>
+          <th onClick={() => handleSort('amount')}>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sortedTransactions.map((t) => (
+          <tr key={t.id}>
+            <td>{t.date}</td>
+            <td>{t.description}</td>
+            <td>{t.category}</td>
+            <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
 
-                    <ResponsiveContainer width="100%" height={260}>
-                      <PieChart>
-                        <Pie
-                          data={overviewProjectedCategoryData}
-                          dataKey="value"
-                          nameKey="name"
-                          outerRadius={90}
-                          label={({ name, percent }) =>
-                            `${name} ${(percent * 100).toFixed(0)}%`
-                          }
-                        >
-                          {overviewProjectedCategoryData.map(d => (
-                            <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                          ))}
-                        </Pie>
-                        <Tooltip {...tt} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </>
-              )}
+<div className="panel">
+  <h2>Own Summary</h2>
+  <div className="table-wrap">
+    <table className="data-table">
+      <tbody>
+        <tr>
+          <td>Total Own Spend</td>
+          <td className="amount">{fmtEUR(myTotalSpend)}</td>
+        </tr>
+        <tr>
+          <td>Transactions</td>
+          <td className="amount">{filtered.length}</td>
+        </tr>
+        <tr>
+          <td>Categories</td>
+          <td className="amount">{categoryData.length}</td>
+        </tr>
+        {categoryData.map((row) => (
+          <tr key={row.name}>
+            <td>{row.name}</td>
+            <td className="amount">{fmtEUR(row.value)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
             </div>
 
             <div className="panel">
