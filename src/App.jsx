@@ -1664,21 +1664,17 @@ return (
           <>
             <div className="panel">
               <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '1rem',
-                }}
-              >
-                <h2>Monthly Split Balance</h2>
-                <button
-                  className="btn btn-small btn-primary"
-                  onClick={markAllSplitsPaid}
-                >
-                  Paid
-                </button>
-              </div>
+  style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    flexWrap: 'wrap',
+  }}
+>
+  <h2>Monthly Split Balance</h2>
+  <button className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>Paid</button>
+</div>
               <p className="subtle-note">
                 50% of each split transaction is counted as owed to you.
               </p>
