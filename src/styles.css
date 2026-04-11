@@ -186,3 +186,144 @@ table { border-collapse: collapse; width: 100%; }
 .btn-cancel:hover {
   background: var(--color-surface-dynamic);
 }
+
+@media (max-width: 1024px) {
+  .app {
+    padding: var(--space-4);
+  }
+
+  .topbar {
+    align-items: stretch;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .topbar-actions .btn {
+    width: 100%;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .tab-btn {
+    justify-content: center;
+    text-align: center;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-2);
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    padding: var(--space-5);
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 720px;
+  }
+
+  .data-table th,
+  .data-table td {
+    white-space: nowrap;
+  }
+
+  .row-actions {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .app {
+    padding: var(--space-3);
+  }
+
+  .topbar-title h1 {
+    font-size: 1.35rem;
+  }
+
+  .topbar-title p {
+    line-height: 1.4;
+  }
+
+  .topbar-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-card {
+    padding: var(--space-4);
+  }
+
+  .tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tab-btn {
+    font-size: var(--text-xs);
+    min-height: 46px;
+  }
+
+  .search-input,
+  .field-input,
+  .amount-input {
+    min-height: 44px;
+  }
+
+  .panel {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+
+  .panel h2 {
+    font-size: 1.05rem;
+    margin-bottom: var(--space-3);
+  }
+
+  .subtle-note {
+    font-size: var(--text-xs);
+  }
+
+  .data-table {
+    min-width: 680px;
+  }
+
+  .data-table th,
+  .data-table td {
+    font-size: 0.82rem;
+    padding: 0.65rem 0.6rem;
+  }
+
+  .row-actions {
+    flex-wrap: wrap;
+  }
+
+  .btn,
+  .btn-small,
+  .btn-split {
+    min-height: 44px;
+  }
+
+  .empty-state {
+    padding: var(--space-8) var(--space-4);
+  }
+}

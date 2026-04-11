@@ -89,6 +89,8 @@ export default function App() {
   const [status, setStatus] = useState('Import a CSV or Excel (.xlsx) file to start.')
   const [darkMode, setDarkMode] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640)
+
   const [dateFilter, setDateFilter] = useState('')
   const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
   const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
@@ -106,6 +108,11 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+  useEffect(() => {
+  const onResize = () => setIsMobile(window.innerWidth <= 640)
+  window.addEventListener('resize', onResize)
+  return () => window.removeEventListener('resize', onResize)
+}, [])
 
   // Load from IndexedDB once on mount
   useEffect(() => {
@@ -812,17 +819,22 @@ function toggleSplit(id) {
   }, [forecastByCategory])
 
   const tt = {
-    contentStyle: {
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 8,
-    },
-    formatter: v => fmtEUR(v),
-  }
-  const axisTick = { fontSize: 11, fill: 'var(--color-text-muted)' }
+  contentStyle: {
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 8,
+  },
+  formatter: (v) => fmtEUR(v),
+}
 
-  return (
-    <div className="app">
+const axisTick = { fontSize: isMobile ? 10 : 11, fill: 'var(--color-text-muted)' }
+const pieHeight = isMobile ? 220 : 260
+const chartHeight = isMobile ? 220 : 300
+const merchantChartHeight = isMobile ? 320 : 400
+
+return (
+  
+  <div className="app">
       <header className="topbar">
         <div className="topbar-title">
           <h1>SpliToshl</h1>
@@ -938,7 +950,7 @@ function toggleSplit(id) {
       <div className="grid-2">
         <div className="panel">
           <h2>Spending by Category</h2>
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={pieHeight}>
             <PieChart>
               <Pie
                 data={categoryData}
@@ -960,7 +972,7 @@ function toggleSplit(id) {
 
         <div className="panel">
           <h2>Monthly Spend</h2>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={monthData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
               <XAxis dataKey="name" tick={axisTick} />
@@ -1040,7 +1052,7 @@ function toggleSplit(id) {
           <div className="grid-2">
             <div className="panel">
               <h2>Joint Spending by Category</h2>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={pieHeight}>
                 <PieChart>
                   <Pie
                     data={jointCategoryData}
@@ -1060,7 +1072,7 @@ function toggleSplit(id) {
 
             <div className="panel">
               <h2>Joint Monthly Spend</h2>
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={chartHeight}>
                 <BarChart data={jointMonthData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
                   <XAxis dataKey="name" tick={axisTick} />
@@ -1130,7 +1142,7 @@ function toggleSplit(id) {
         ) : (
           <div className="panel">
             <h2>Top Merchants by Spend</h2>
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer width="100%" height={merchantChartHeight}>
               <BarChart data={merchantData} layout="vertical" margin={{ left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
                 <XAxis type="number" tick={axisTick} tickFormatter={v => fmtEUR(v)} />
@@ -1154,7 +1166,7 @@ function toggleSplit(id) {
                 <p className="subtle-note">
                   Average of recent monthly spend: {fmtEUR(forecast.avg)}
                 </p>
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={chartHeight}>
                   <LineChart data={forecast.series}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
                     <XAxis dataKey="month" tick={axisTick} />
