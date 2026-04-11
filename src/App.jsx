@@ -879,7 +879,7 @@ function toggleSplit(id) {
         </div>
         <div className="kpi-card">
           <div className="label">Categories</div>
-          <div className="value">{categoryData.length}</div>
+          <div className="value">{fmtInt(categoryData.length)}</div>
         </div>
         <div className="kpi-card">
   <div className="label">Joint Spend (full)</div>
@@ -1010,11 +1010,11 @@ function toggleSplit(id) {
                 </tr>
                 <tr>
                   <td>Transactions</td>
-                  <td className="amount">{filtered.length}</td>
+                  <td className="amount">{fmtEUR(filtered.length)}</td>
                 </tr>
                 <tr>
                   <td>Categories</td>
-                  <td className="amount">{categoryData.length}</td>
+                  <td className="amount">{fmtInt(categoryData.length)}</td>
                 </tr>
                 {categoryData.map((row) => (
                   <tr key={row.name}>
@@ -1108,7 +1108,7 @@ function toggleSplit(id) {
         </tr>
         <tr>
           <td>Transactions</td>
-          <td className="amount">{filteredJointTransactions.length}</td>
+          <td className="amount">{fmtEUR(filteredJointTransactions.length)}</td>
         </tr>
         {jointCategoryData.map((row) => (
           <tr key={row.name}>
