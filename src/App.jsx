@@ -922,102 +922,105 @@ function toggleSplit(id) {
   )}
 </div>
 
-      {/* ── OWN OVERVIEW ── */}
-      {activeTab === 'Own' &&
-        (!hasData ? (
-          <EmptyState />
-        ) : (
-          <div className="grid-2">
-            <div className="panel">
-              <h2>Spending by Category</h2>
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    dataKey="value"
-                    nameKey="name"
-                    outerRadius={90}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {categoryData.map(d => (
-                      <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                    ))}
-                  </Pie>
-                  <Tooltip {...tt} />
-                </PieChart>
-              </ResponsiveContainer>
+{activeTab === 'Own' &&
+  (!hasData ? (
+    <EmptyState />
+  ) : (
+    <>
+      <div className="grid-2">
+        <div className="panel">
+          <h2>Spending by Category</h2>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={categoryData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={90}
+                label={({ name, percent }) =>
+                  `${name} ${(percent * 100).toFixed(0)}%`
+                }
+              >
+                {categoryData.map((d) => (
+                  <Cell key={d.name} fill={getCategoryColor(d.name)} />
+                ))}
+              </Pie>
+              <Tooltip {...tt} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
 
-              <div className="grid-2">
-  <div className="panel">
-    <h2>Own Transactions {sortedTransactions.length}</h2>
-    <div className="table-wrap">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th onClick={() => handleSort('date')}>Date</th>
-            <th onClick={() => handleSort('description')}>Description</th>
-            <th onClick={() => handleSort('category')}>Category</th>
-            <th onClick={() => handleSort('amount')}>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedTransactions.map((t) => (
-            <tr key={t.id}>
-              <td>{t.date}</td>
-              <td>{t.description}</td>
-              <td>{t.category}</td>
-              <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
+        <div className="panel">
+          <h2>Monthly Spend</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={monthData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
+              <XAxis dataKey="name" tick={axisTick} />
+              <YAxis tick={axisTick} />
+              <Tooltip {...tt} />
+              <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-  <div className="panel">
-    <h2>Own Summary</h2>
-    <div className="table-wrap">
-      <table className="data-table">
-        <tbody>
-          <tr>
-            <td>Total Own Spend</td>
-            <td className="amount">{fmtEUR(myTotalSpend)}</td>
-          </tr>
-          <tr>
-            <td>Transactions</td>
-            <td className="amount">{filtered.length}</td>
-          </tr>
-          <tr>
-            <td>Categories</td>
-            <td className="amount">{categoryData.length}</td>
-          </tr>
-          {categoryData.map((row) => (
-            <tr key={row.name}>
-              <td>{row.name}</td>
-              <td className="amount">{fmtEUR(row.value)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-</div>
-
-            <div className="panel">
-              <h2>Monthly Spend</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-                  <XAxis dataKey="name" tick={axisTick} />
-                  <YAxis tick={axisTick} />
-                  <Tooltip {...tt} />
-                  <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+      <div className="grid-2">
+        <div className="panel">
+          <h2>Own Transactions {sortedTransactions.length}</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th onClick={() => handleSort('date')}>Date</th>
+                  <th onClick={() => handleSort('description')}>Description</th>
+                  <th onClick={() => handleSort('category')}>Category</th>
+                  <th onClick={() => handleSort('amount')}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedTransactions.map((t) => (
+                  <tr key={t.id}>
+                    <td>{t.date}</td>
+                    <td>{t.description}</td>
+                    <td>{t.category}</td>
+                    <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))}
+        </div>
+
+        <div className="panel">
+          <h2>Own Summary</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <tbody>
+                <tr>
+                  <td>Total Own Spend</td>
+                  <td className="amount">{fmtEUR(myTotalSpend)}</td>
+                </tr>
+                <tr>
+                  <td>Transactions</td>
+                  <td className="amount">{filtered.length}</td>
+                </tr>
+                <tr>
+                  <td>Categories</td>
+                  <td className="amount">{categoryData.length}</td>
+                </tr>
+                {categoryData.map((row) => (
+                  <tr key={row.name}>
+                    <td>{row.name}</td>
+                    <td className="amount">{fmtEUR(row.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </>
+  ))}
 
       {/* ── JOINT OVERVIEW ── */}
       {activeTab === 'Joint' &&
