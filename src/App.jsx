@@ -947,60 +947,62 @@ function toggleSplit(id) {
                 </PieChart>
               </ResponsiveContainer>
 
-              <div className="panel">
-  <h2>Own Transactions {sortedTransactions.length}</h2>
-  <div className="table-wrap">
-    <table className="data-table">
-      <thead>
-        <tr>
-          <th onClick={() => handleSort('date')}>Date</th>
-          <th onClick={() => handleSort('description')}>Description</th>
-          <th onClick={() => handleSort('category')}>Category</th>
-          <th onClick={() => handleSort('amount')}>Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {sortedTransactions.map((t) => (
-          <tr key={t.id}>
-            <td>{t.date}</td>
-            <td>{t.description}</td>
-            <td>{t.category}</td>
-            <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+              <div className="grid-2">
+  <div className="panel">
+    <h2>Own Transactions {sortedTransactions.length}</h2>
+    <div className="table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th onClick={() => handleSort('date')}>Date</th>
+            <th onClick={() => handleSort('description')}>Description</th>
+            <th onClick={() => handleSort('category')}>Category</th>
+            <th onClick={() => handleSort('amount')}>Amount</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sortedTransactions.map((t) => (
+            <tr key={t.id}>
+              <td>{t.date}</td>
+              <td>{t.description}</td>
+              <td>{t.category}</td>
+              <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
 
-<div className="panel">
-  <h2>Own Summary</h2>
-  <div className="table-wrap">
-    <table className="data-table">
-      <tbody>
-        <tr>
-          <td>Total Own Spend</td>
-          <td className="amount">{fmtEUR(myTotalSpend)}</td>
-        </tr>
-        <tr>
-          <td>Transactions</td>
-          <td className="amount">{filtered.length}</td>
-        </tr>
-        <tr>
-          <td>Categories</td>
-          <td className="amount">{categoryData.length}</td>
-        </tr>
-        {categoryData.map((row) => (
-          <tr key={row.name}>
-            <td>{row.name}</td>
-            <td className="amount">{fmtEUR(row.value)}</td>
+  <div className="panel">
+    <h2>Own Summary</h2>
+    <div className="table-wrap">
+      <table className="data-table">
+        <tbody>
+          <tr>
+            <td>Total Own Spend</td>
+            <td className="amount">{fmtEUR(myTotalSpend)}</td>
           </tr>
-        ))}
-      </tbody>
-    </table>
+          <tr>
+            <td>Transactions</td>
+            <td className="amount">{filtered.length}</td>
+          </tr>
+          <tr>
+            <td>Categories</td>
+            <td className="amount">{categoryData.length}</td>
+          </tr>
+          {categoryData.map((row) => (
+            <tr key={row.name}>
+              <td>{row.name}</td>
+              <td className="amount">{fmtEUR(row.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
-            </div>
+</div>
 
             <div className="panel">
               <h2>Monthly Spend</h2>
