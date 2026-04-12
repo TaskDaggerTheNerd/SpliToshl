@@ -112,7 +112,8 @@ export default function App() {
     split: false,
     joint: false,
   })
-
+const [loginEmail, setLoginEmail] = useState('')
+const [loginPassword, setLoginPassword] = useState('')
   
 
   const fileRef = useRef(null)
@@ -564,18 +565,19 @@ function handleJointSort(key) {
   }
 
   const hasData = transactions.length > 0
-async function signInDemo() {
-  const email = window.prompt('Enter your email for SpliToshl login:')
-  if (!email) return
-
-  const { error } = await supabase.auth.signInWithOtp({ email })
+async function signInWithEmailPassword(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
 
   if (error) {
     setStatus(`Login failed: ${error.message}`)
     return
   }
 
-  setStatus(`Login link sent to ${email}. Check your email.`)
+  setUser(data.user ?? null)
+  setStatus('Signed in successfully.')
 }
 
 async function signOutUser() {
@@ -1048,9 +1050,28 @@ return (
     Sign out
   </button>
 ) : (
-  <button className="btn btn-quiet" onClick={signInDemo}>
-    Sign in
-  </button>
+  <div className="login-inline">
+    <input
+      className="field-input login-input"
+      type="email"
+      placeholder="Email"
+      value={loginEmail}
+      onChange={(e) => setLoginEmail(e.target.value)}
+    />
+    <input
+      className="field-input login-input"
+      type="password"
+      placeholder="Password"
+      value={loginPassword}
+      onChange={(e) => setLoginPassword(e.target.value)}
+    />
+    <button
+      className="btn btn-quiet"
+      onClick={() => signInWithEmailPassword(loginEmail, loginPassword)}
+    >
+      Log in
+    </button>
+  </div>
 )}
 
   <input
