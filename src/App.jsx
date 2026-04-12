@@ -114,9 +114,6 @@ export default function App() {
   })
 const [loginEmail, setLoginEmail] = useState('Joao')
 const [loginPassword, setLoginPassword] = useState('Tasco69')
-
-const [loginEmail, setLoginEmail] = useState('Carmen')
-const [loginPassword, setLoginPassword] = useState('Qualeapass?')
   
 
   const fileRef = useRef(null)
