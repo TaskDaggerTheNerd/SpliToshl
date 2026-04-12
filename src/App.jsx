@@ -648,7 +648,7 @@ function importRows(rows, label) {
   }
 }
 
-function finishImport(rows, label, accountType) {
+async function finishImport(rows, label, accountType) {
   const isJoint = accountType === 'joint'
   const normalized = dedup(normalizeTransactions(rows))
 
@@ -662,13 +662,9 @@ function finishImport(rows, label, accountType) {
     ...t,
     account: t.account || (isJoint ? 'joint' : 'personal'),
     split: t.account ? Boolean(t.split) : false,
-    joint: t.account === 'joint' ? true : (isJoint ? true : Boolean(t.joint)),
+    joint: t.account === 'joint' ? true : isJoint ? true : Boolean(t.joint),
     jointMode:
-      t.account === 'joint'
-        ? 'full'
-        : isJoint
-          ? 'full'
-          : (t.joint ? (t.jointMode || 'full') : null),
+      t.account === 'joint' ? 'full' : isJoint ? 'full' : t.joint ? t.jointMode || 'full' : null,
   }))
 
   const merged = dedup([...transactions, ...enriched])
@@ -679,9 +675,43 @@ function finishImport(rows, label, accountType) {
     return
   }
 
+  if (user) {
+    const payload = enriched.map((t) => ({
+      id: t.id,
+      user_id: user.id,
+      date: t.date,
+      description: t.description,
+      merchant: t.merchant || t.description,
+      amount: Number(t.amount || 0),
+      category: t.category || 'Other',
+      split: Boolean(t.split),
+      split_paid: Boolean(t.splitPaid),
+      joint: Boolean(t.joint),
+      joint_mode: t.jointMode || null,
+      account: t.account || 'personal',
+    }))
+
+    const { error } = await supabase
+      .from('transactions')
+      .upsert(payload, { onConflict: 'id' })
+
+    if (error) {
+      setStatus(`Imported locally, but cloud save failed: ${error.message}`)
+      setTransactions(merged)
+      setEditingId(null)
+      setActiveTab('Own')
+      setPendingImport(null)
+      return
+    }
+  }
+
   setTransactions(merged)
   setEditingId(null)
-  setStatus(`Merged ${merged.length - transactions.length} new transactions from ${label}.`)
+  setStatus(
+    user
+      ? `Merged ${merged.length - transactions.length} new transactions from ${label} and saved online.`
+      : `Merged ${merged.length - transactions.length} new transactions from ${label}.`
+  )
   setActiveTab('Own')
   setPendingImport(null)
 }
