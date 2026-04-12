@@ -16,7 +16,6 @@ import {
   DEFAULTCATEGORIES,
 } from './utils'
 import { saveToIDB, loadFromIDB, exportJSON, importJSON } from './storage'
-import { supabase } from './supabase'
 import { generatePDFReport } from './report'
 
 const PALETTE = ['#01696f', '#e9c46a', '#f4a261', '#e76f51', '#264653', '#8ab17d', '#6d597a', '#577590', '#bc4749', '#a8dadc']
@@ -102,7 +101,6 @@ export default function App() {
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
-  const [user, setUser] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [manualDraft, setManualDraft] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -112,8 +110,6 @@ export default function App() {
     split: false,
     joint: false,
   })
-const [loginEmail, setLoginEmail] = useState('')
-const [loginPassword, setLoginPassword] = useState('')
 
   
 
@@ -129,40 +125,17 @@ const [loginPassword, setLoginPassword] = useState('')
   return () => window.removeEventListener('resize', onResize)
 }, [])
 
-useEffect(() => {
-  ;(async () => {
-    const { data } = await supabase.auth.getUser()
-    const currentUser = data?.user ?? null
-    setUser(currentUser)
-
-    if (currentUser) {
-      await loadTransactionsFromCloud(currentUser)
-      return
-    }
-
-    const saved = await loadFromIDB()
-    if (saved?.transactions?.length) {
-      const normalized = dedup(normalizeTransactions(saved.transactions))
-      setTransactions(normalized)
-      setStatus(`Loaded ${normalized.length} saved local transactions.`)
-    }
-  })()
-
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    const currentUser = session?.user ?? null
-    setUser(currentUser)
-
-    if (currentUser) {
-      await loadTransactionsFromCloud(currentUser)
-    } else {
-      setTransactions([])
-    }
-  })
-
-  return () => subscription.unsubscribe()
-}, [])
+  // Load from IndexedDB once on mount
+  useEffect(() => {
+    ;(async () => {
+      const saved = await loadFromIDB()
+      if (saved?.transactions?.length) {
+        const normalized = dedup(normalizeTransactions(saved.transactions))
+        setTransactions(normalized)
+        setStatus(`Loaded ${normalized.length} saved transactions.`)
+      }
+    })()
+  }, [])
 
   // Persist to IndexedDB whenever transactions change
   useEffect(() => {
@@ -566,94 +539,6 @@ function handleJointSort(key) {
   }
 
   const hasData = transactions.length > 0
-async function signInWithEmailPassword(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) {
-    setStatus(`Login failed: ${error.message}`)
-    return
-  }
-
-  setUser(data.user ?? null)
-  setStatus('Signed in successfully.')
-}
-
-async function signOutUser() {
-  await supabase.auth.signOut()
-  setUser(null)
-  setTransactions([])
-  setStatus('Signed out.')
-}
-
-async function loadTransactionsFromCloud(currentUser) {
-  const pageSize = 1000
-  let from = 0
-  let allRows = []
-  let keepLoading = true
-
-  while (keepLoading) {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .order('date', { ascending: false })
-      .range(from, from + pageSize - 1)
-
-    if (error) {
-      setStatus(`Cloud load failed: ${error.message}`)
-      return
-    }
-
-    const rows = data || []
-    allRows = [...allRows, ...rows]
-
-    if (rows.length < pageSize) {
-      keepLoading = false
-    } else {
-      from += pageSize
-    }
-  }
-
-  const mapped = allRows.map((t) => ({
-    id: t.id,
-    date: t.date,
-    description: t.description,
-    merchant: t.merchant || t.description,
-    amount: Number(t.amount || 0),
-    category: t.category || 'Other',
-    split: Boolean(t.split),
-    splitPaid: Boolean(t.split_paid),
-    joint: Boolean(t.joint),
-    jointMode: t.joint_mode || null,
-    account: t.account || 'personal',
-  }))
-
-  const normalized = dedup(normalizeTransactions(mapped))
-  setTransactions(normalized)
-  setStatus(`Loaded ${normalized.length} cloud transactions.`)
-}
-
-async function addTransactionToCloud(tx, currentUser) {
-  const { error } = await supabase.from('transactions').insert({
-    id: tx.id,
-    user_id: currentUser.id,
-    date: tx.date,
-    description: tx.description,
-    merchant: tx.merchant,
-    amount: tx.amount,
-    category: tx.category,
-    split: tx.split,
-    split_paid: tx.splitPaid,
-    joint: tx.joint,
-    joint_mode: tx.jointMode,
-    account: tx.account,
-  })
-
-  return error
-}
-
 
 function importRows(rows, label) {
   const hasAccountFlag = rows.some(r => r.account)
@@ -665,7 +550,7 @@ function importRows(rows, label) {
   }
 }
 
-async function finishImport(rows, label, accountType) {
+function finishImport(rows, label, accountType) {
   const isJoint = accountType === 'joint'
   const normalized = dedup(normalizeTransactions(rows))
 
@@ -679,9 +564,13 @@ async function finishImport(rows, label, accountType) {
     ...t,
     account: t.account || (isJoint ? 'joint' : 'personal'),
     split: t.account ? Boolean(t.split) : false,
-    joint: t.account === 'joint' ? true : isJoint ? true : Boolean(t.joint),
+    joint: t.account === 'joint' ? true : (isJoint ? true : Boolean(t.joint)),
     jointMode:
-      t.account === 'joint' ? 'full' : isJoint ? 'full' : t.joint ? t.jointMode || 'full' : null,
+      t.account === 'joint'
+        ? 'full'
+        : isJoint
+          ? 'full'
+          : (t.joint ? (t.jointMode || 'full') : null),
   }))
 
   const merged = dedup([...transactions, ...enriched])
@@ -692,43 +581,9 @@ async function finishImport(rows, label, accountType) {
     return
   }
 
-  if (user) {
-    const payload = enriched.map((t) => ({
-      id: t.id,
-      user_id: user.id,
-      date: t.date,
-      description: t.description,
-      merchant: t.merchant || t.description,
-      amount: Number(t.amount || 0),
-      category: t.category || 'Other',
-      split: Boolean(t.split),
-      split_paid: Boolean(t.splitPaid),
-      joint: Boolean(t.joint),
-      joint_mode: t.jointMode || null,
-      account: t.account || 'personal',
-    }))
-
-    const { error } = await supabase
-      .from('transactions')
-      .upsert(payload, { onConflict: 'id' })
-
-    if (error) {
-      setStatus(`Imported locally, but cloud save failed: ${error.message}`)
-      setTransactions(merged)
-      setEditingId(null)
-      setActiveTab('Own')
-      setPendingImport(null)
-      return
-    }
-  }
-
   setTransactions(merged)
   setEditingId(null)
-  setStatus(
-    user
-      ? `Merged ${merged.length - transactions.length} new transactions from ${label} and saved online.`
-      : `Merged ${merged.length - transactions.length} new transactions from ${label}.`
-  )
+  setStatus(`Merged ${merged.length - transactions.length} new transactions from ${label}.`)
   setActiveTab('Own')
   setPendingImport(null)
 }
@@ -809,7 +664,7 @@ function closeManualAdd() {
   setShowAddModal(false)
 }
 
-async function saveManualExpense() {
+function saveManualExpense() {
   const amount = Number(String(manualDraft.amount).replace(',', '.'))
 
   if (!manualDraft.date) {
@@ -838,21 +693,13 @@ async function saveManualExpense() {
     splitPaid: false,
     joint: Boolean(manualDraft.joint),
     jointMode: null,
-    account: 'personal',
-  }
-
-  if (user) {
-    const error = await addTransactionToCloud(newTransaction, user)
-    if (error) {
-      setStatus(`Cloud save failed: ${error.message}`)
-      return
-    }
+    account: manualDraft.joint ? 'personal' : 'personal',
   }
 
   setTransactions((prev) => dedup([...prev, newTransaction]))
   setShowAddModal(false)
   setEditingId(null)
-  setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+  setStatus('Manual expense added.')
   setActiveTab('Transactions')
 }
 
@@ -1092,35 +939,6 @@ return (
   >
     {darkMode ? <SunIcon /> : <MoonIcon />}
   </button>
-
-{user ? (
-  <button className="btn btn-quiet" onClick={signOutUser}>
-    Sign out
-  </button>
-) : (
-  <div className="login-inline">
-    <input
-      className="field-input login-input"
-      type="email"
-      placeholder="Email"
-      value={loginEmail}
-      onChange={(e) => setLoginEmail(e.target.value)}
-    />
-    <input
-      className="field-input login-input"
-      type="password"
-      placeholder="Password"
-      value={loginPassword}
-      onChange={(e) => setLoginPassword(e.target.value)}
-    />
-    <button
-      className="btn btn-quiet"
-      onClick={() => signInWithEmailPassword(loginEmail, loginPassword)}
-    >
-      Log in
-    </button>
-  </div>
-)}
 
   <input
     ref={fileRef}
