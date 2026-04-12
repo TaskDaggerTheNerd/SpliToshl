@@ -112,8 +112,9 @@ export default function App() {
     split: false,
     joint: false,
   })
-const [loginEmail, setLoginEmail] = useState('Joao')
-const [loginPassword, setLoginPassword] = useState('Tasco69')
+const [loginEmail, setLoginEmail] = useState('')
+const [loginPassword, setLoginPassword] = useState('')
+
   
 
   const fileRef = useRef(null)
