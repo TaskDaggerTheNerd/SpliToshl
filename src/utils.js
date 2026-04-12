@@ -14,30 +14,27 @@ export const DEFAULTCATEGORIES = [
   'Sports',
 ]
 
-const EUR_FORMATTER = new Intl.NumberFormat('pt-PT', {
-  style: 'currency',
-  currency: 'EUR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
-const INTEGER_FORMATTER = new Intl.NumberFormat('pt-PT', {
-  maximumFractionDigits: 0,
-})
+function formatGroupedNumber(value, decimals = 2) {
+  const n = Number(value ?? 0)
+  const safe = Number.isFinite(n) ? n : 0
+  const sign = safe < 0 ? '-' : ''
+  const abs = Math.abs(safe)
+  const fixed = abs.toFixed(decimals)
+  const [intPart, decPart] = fixed.split('.')
+  const groupedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return decimals > 0 ? `${sign}${groupedInt},${decPart}` : `${sign}${groupedInt}`
+}
 
 export function fmtEUR(v) {
-  return EUR_FORMATTER.format(Number(v || 0))
+  return `${formatGroupedNumber(v, 2)} €`
 }
 
 export function fmtNumber(v, decimals = 2) {
-  return new Intl.NumberFormat('pt-PT', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(Number(v || 0))
+  return formatGroupedNumber(v, decimals)
 }
 
 export function fmtInt(v) {
-  return INTEGER_FORMATTER.format(Number(v || 0))
+  return formatGroupedNumber(v, 0)
 }
 
 export function r2(v) {
