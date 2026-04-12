@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "papaparse": "^5.4.1",

@@ -16,6 +16,7 @@ import {
   DEFAULTCATEGORIES,
 } from './utils'
 import { saveToIDB, loadFromIDB, exportJSON, importJSON } from './storage'
+import { supabase } from './supabase'
 import { generatePDFReport } from './report'
 
 const PALETTE = ['#01696f', '#e9c46a', '#f4a261', '#e76f51', '#264653', '#8ab17d', '#6d597a', '#577590', '#bc4749', '#a8dadc']
@@ -101,6 +102,7 @@ export default function App() {
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
+  const [user, setUser] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [manualDraft, setManualDraft] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -125,17 +127,40 @@ export default function App() {
   return () => window.removeEventListener('resize', onResize)
 }, [])
 
-  // Load from IndexedDB once on mount
-  useEffect(() => {
-    ;(async () => {
-      const saved = await loadFromIDB()
-      if (saved?.transactions?.length) {
-        const normalized = dedup(normalizeTransactions(saved.transactions))
-        setTransactions(normalized)
-        setStatus(`Loaded ${normalized.length} saved transactions.`)
-      }
-    })()
-  }, [])
+useEffect(() => {
+  ;(async () => {
+    const { data } = await supabase.auth.getUser()
+    const currentUser = data?.user ?? null
+    setUser(currentUser)
+
+    if (currentUser) {
+      await loadTransactionsFromCloud(currentUser)
+      return
+    }
+
+    const saved = await loadFromIDB()
+    if (saved?.transactions?.length) {
+      const normalized = dedup(normalizeTransactions(saved.transactions))
+      setTransactions(normalized)
+      setStatus(`Loaded ${normalized.length} saved local transactions.`)
+    }
+  })()
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const currentUser = session?.user ?? null
+    setUser(currentUser)
+
+    if (currentUser) {
+      await loadTransactionsFromCloud(currentUser)
+    } else {
+      setTransactions([])
+    }
+  })
+
+  return () => subscription.unsubscribe()
+}, [])
 
   // Persist to IndexedDB whenever transactions change
   useEffect(() => {
@@ -539,6 +564,76 @@ function handleJointSort(key) {
   }
 
   const hasData = transactions.length > 0
+async function signInDemo() {
+  const email = window.prompt('Enter your email for SpliToshl login:')
+  if (!email) return
+
+  const { error } = await supabase.auth.signInWithOtp({ email })
+
+  if (error) {
+    setStatus(`Login failed: ${error.message}`)
+    return
+  }
+
+  setStatus(`Login link sent to ${email}. Check your email.`)
+}
+
+async function signOutUser() {
+  await supabase.auth.signOut()
+  setUser(null)
+  setTransactions([])
+  setStatus('Signed out.')
+}
+
+async function loadTransactionsFromCloud(currentUser) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .order('date', { ascending: false })
+
+  if (error) {
+    setStatus(`Cloud load failed: ${error.message}`)
+    return
+  }
+
+  const mapped = (data || []).map((t) => ({
+    id: t.id,
+    date: t.date,
+    description: t.description,
+    merchant: t.merchant || t.description,
+    amount: Number(t.amount || 0),
+    category: t.category || 'Other',
+    split: Boolean(t.split),
+    splitPaid: Boolean(t.split_paid),
+    joint: Boolean(t.joint),
+    jointMode: t.joint_mode || null,
+    account: t.account || 'personal',
+  }))
+
+  const normalized = dedup(normalizeTransactions(mapped))
+  setTransactions(normalized)
+  setStatus(`Loaded ${normalized.length} cloud transactions.`)
+}
+
+async function addTransactionToCloud(tx, currentUser) {
+  const { error } = await supabase.from('transactions').insert({
+    id: tx.id,
+    user_id: currentUser.id,
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant,
+    amount: tx.amount,
+    category: tx.category,
+    split: tx.split,
+    split_paid: tx.splitPaid,
+    joint: tx.joint,
+    joint_mode: tx.jointMode,
+    account: tx.account,
+  })
+
+  return error
+}
+
 
 function importRows(rows, label) {
   const hasAccountFlag = rows.some(r => r.account)
@@ -664,7 +759,7 @@ function closeManualAdd() {
   setShowAddModal(false)
 }
 
-function saveManualExpense() {
+async function saveManualExpense() {
   const amount = Number(String(manualDraft.amount).replace(',', '.'))
 
   if (!manualDraft.date) {
@@ -693,13 +788,21 @@ function saveManualExpense() {
     splitPaid: false,
     joint: Boolean(manualDraft.joint),
     jointMode: null,
-    account: manualDraft.joint ? 'personal' : 'personal',
+    account: 'personal',
+  }
+
+  if (user) {
+    const error = await addTransactionToCloud(newTransaction, user)
+    if (error) {
+      setStatus(`Cloud save failed: ${error.message}`)
+      return
+    }
   }
 
   setTransactions((prev) => dedup([...prev, newTransaction]))
   setShowAddModal(false)
   setEditingId(null)
-  setStatus('Manual expense added.')
+  setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
   setActiveTab('Transactions')
 }
 
@@ -939,6 +1042,16 @@ return (
   >
     {darkMode ? <SunIcon /> : <MoonIcon />}
   </button>
+
+{user ? (
+  <button className="btn btn-quiet" onClick={signOutUser}>
+    Sign out
+  </button>
+) : (
+  <button className="btn btn-quiet" onClick={signInDemo}>
+    Sign in
+  </button>
+)}
 
   <input
     ref={fileRef}
