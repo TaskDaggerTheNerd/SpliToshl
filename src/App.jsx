@@ -589,17 +589,34 @@ async function signOutUser() {
 }
 
 async function loadTransactionsFromCloud(currentUser) {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .order('date', { ascending: false })
+  const pageSize = 1000
+  let from = 0
+  let allRows = []
+  let keepLoading = true
 
-  if (error) {
-    setStatus(`Cloud load failed: ${error.message}`)
-    return
+  while (keepLoading) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .range(from, from + pageSize - 1)
+
+    if (error) {
+      setStatus(`Cloud load failed: ${error.message}`)
+      return
+    }
+
+    const rows = data || []
+    allRows = [...allRows, ...rows]
+
+    if (rows.length < pageSize) {
+      keepLoading = false
+    } else {
+      from += pageSize
+    }
   }
 
-  const mapped = (data || []).map((t) => ({
+  const mapped = allRows.map((t) => ({
     id: t.id,
     date: t.date,
     description: t.description,
