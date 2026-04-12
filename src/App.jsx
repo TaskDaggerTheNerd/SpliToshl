@@ -101,6 +101,17 @@ export default function App() {
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [manualDraft, setManualDraft] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    description: '',
+    category: 'Other',
+    amount: '',
+    split: false,
+    joint: false,
+  })
+
+  
 
   const fileRef = useRef(null)
   const jsonRef = useRef(null)
@@ -637,6 +648,61 @@ async function handleJSON(file) {
   setStatus('All data cleared.')
 }
 
+function openManualAdd() {
+  setManualDraft({
+    date: new Date().toISOString().slice(0, 10),
+    description: '',
+    category: 'Other',
+    amount: '',
+    split: false,
+    joint: false,
+  })
+  setShowAddModal(true)
+}
+
+function closeManualAdd() {
+  setShowAddModal(false)
+}
+
+function saveManualExpense() {
+  const amount = Number(String(manualDraft.amount).replace(',', '.'))
+
+  if (!manualDraft.date) {
+    setStatus('Date is required.')
+    return
+  }
+
+  if (!manualDraft.description.trim()) {
+    setStatus('Description is required.')
+    return
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    setStatus('Amount must be a valid positive number.')
+    return
+  }
+
+  const newTransaction = {
+    id: `${manualDraft.date}-${manualDraft.description.trim()}-${amount}-${Date.now()}`,
+    date: manualDraft.date,
+    description: manualDraft.description.trim(),
+    merchant: manualDraft.description.trim(),
+    amount,
+    category: manualDraft.category || 'Other',
+    split: Boolean(manualDraft.split),
+    splitPaid: false,
+    joint: Boolean(manualDraft.joint),
+    jointMode: null,
+    account: manualDraft.joint ? 'personal' : 'personal',
+  }
+
+  setTransactions((prev) => dedup([...prev, newTransaction]))
+  setShowAddModal(false)
+  setEditingId(null)
+  setStatus('Manual expense added.')
+  setActiveTab('Transactions')
+}
+
 function markAllSplitsPaid() {
   let changed = 0
 
@@ -841,43 +907,55 @@ return (
           <p>{status}</p>
         </div>
         <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>
-            Import CSV / Excel
-          </button>
-          <button className="btn" onClick={() => jsonRef.current?.click()}>
-            Import JSON
-          </button>
-          <button className="btn" onClick={handleExport}>
-            Export JSON
-          </button>
-          <button className="btn" onClick={handlePDF}>
-            Download PDF
-          </button>
-          <button className="btn" onClick={handleClear}>
-            Clear
-            </button>
-           <button
-            className="btn btn-theme"
-            onClick={() => setDarkMode(v => !v)}
-            aria-label="Toggle theme"
-          >
-            {darkMode ? <SunIcon /> : <MoonIcon />}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,.xlsx,.xls,text/csv"
-            hidden
-            onChange={e => handleFile(e.target.files?.[0])}
-          />
-          <input
-            ref={jsonRef}
-            type="file"
-            accept=".json,application/json"
-            hidden
-            onChange={e => handleJSON(e.target.files?.[0])}
-          />
-        </div>
+  <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>
+    Import CSV / Excel
+  </button>
+
+  <button className="btn btn-small-icon" onClick={openManualAdd} title="Add expense" aria-label="Add expense">
+    +
+  </button>
+
+  <button className="btn" onClick={() => jsonRef.current?.click()}>
+    Import JSON
+  </button>
+
+  <button className="btn" onClick={handleExport}>
+    Export JSON
+  </button>
+
+  <button className="btn" onClick={handlePDF}>
+    Download PDF
+  </button>
+
+  <button className="btn btn-quiet" onClick={handleClear}>
+    Clear
+  </button>
+
+  <button
+    className="btn btn-theme btn-theme-quiet"
+    onClick={() => setDarkMode((v) => !v)}
+    aria-label="Toggle theme"
+    title="Toggle theme"
+  >
+    {darkMode ? <SunIcon /> : <MoonIcon />}
+  </button>
+
+  <input
+    ref={fileRef}
+    type="file"
+    accept=".csv,.xlsx,.xls,text/csv"
+    hidden
+    onChange={(e) => handleFile(e.target.files?.[0])}
+  />
+
+  <input
+    ref={jsonRef}
+    type="file"
+    accept=".json,application/json"
+    hidden
+    onChange={(e) => handleJSON(e.target.files?.[0])}
+  />
+</div>
       </header>
 
       <section className="kpis">
@@ -1729,6 +1807,92 @@ return (
             )}
           </>
               ))}
+
+{showAddModal && (
+  <div className="modal-backdrop" onClick={closeManualAdd}>
+    <div className="modal modal-form" onClick={(e) => e.stopPropagation()}>
+      <h3>Add expense</h3>
+      <p>Manually add one expense to your transactions.</p>
+
+      <div className="manual-form">
+        <label className="field-group">
+          <span>Date</span>
+          <input
+            className="field-input"
+            type="date"
+            value={manualDraft.date}
+            onChange={(e) => setManualDraft((p) => ({ ...p, date: e.target.value }))}
+          />
+        </label>
+
+        <label className="field-group">
+          <span>Description</span>
+          <input
+            className="field-input"
+            type="text"
+            value={manualDraft.description}
+            placeholder="Expense description"
+            onChange={(e) => setManualDraft((p) => ({ ...p, description: e.target.value }))}
+          />
+        </label>
+
+        <label className="field-group">
+          <span>Category</span>
+          <select
+            className="field-input"
+            value={manualDraft.category}
+            onChange={(e) => setManualDraft((p) => ({ ...p, category: e.target.value }))}
+          >
+            {categoryOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field-group">
+          <span>Amount</span>
+          <input
+            className="field-input amount-input"
+            type="number"
+            min="0"
+            step="0.01"
+            value={manualDraft.amount}
+            onChange={(e) => setManualDraft((p) => ({ ...p, amount: e.target.value }))}
+          />
+        </label>
+
+        <label className="field-check">
+          <input
+            type="checkbox"
+            checked={manualDraft.split}
+            onChange={(e) => setManualDraft((p) => ({ ...p, split: e.target.checked }))}
+          />
+          <span>Split</span>
+        </label>
+
+        <label className="field-check">
+          <input
+            type="checkbox"
+            checked={manualDraft.joint}
+            onChange={(e) => setManualDraft((p) => ({ ...p, joint: e.target.checked }))}
+          />
+          <span>Show in Joint tab too</span>
+        </label>
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-primary" onClick={saveManualExpense}>
+          Add expense
+        </button>
+        <button className="btn" onClick={closeManualAdd}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Import type modal */}
       {pendingImport && (
