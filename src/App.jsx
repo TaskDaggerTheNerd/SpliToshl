@@ -26,7 +26,7 @@ import {
   buildSplitSummary,
   DEFAULTCATEGORIES,
 } from './utils'
-import { saveToIDB, loadFromIDB, exportJSON, importJSON } from './storage'
+import { saveToIDB, clearIDB, exportJSON, importJSON } from './storage'
 import { supabase } from './supabase'
 import { generatePDFReport } from './report'
 
@@ -166,19 +166,13 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    ;(async () => {
-      const saved = await loadFromIDB()
-      if (saved?.transactions?.length) {
-        const normalized = dedup(normalizeTransactions(saved.transactions))
-        setTransactions(normalized)
-        setStatus(`Loaded ${normalized.length} saved local transactions.`)
-      }
-    })()
-  }, [])
+  setTransactions([])
+}, [])
 
   useEffect(() => {
-    saveToIDB({ transactions })
-  }, [transactions])
+  if (!user) return
+  saveToIDB({ transactions })
+}, [transactions, user])
 
   const myTransactions = useMemo(() => {
     return transactions.map((t) => {
@@ -535,7 +529,8 @@ export default function App() {
   await loadTransactionsFromCloud(appUser)
 }
 
-  function signOutUser() {
+  async function signOutUser() {
+  await clearIDB()
   setUser(null)
   setTransactions([])
   setLoginName('')

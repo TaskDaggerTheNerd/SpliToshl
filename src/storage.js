@@ -25,6 +25,20 @@ export async function saveToIDB(data) {
   } catch { return false }
 }
 
+export async function clearIDB() {
+  try {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.objectStore(STORE).delete(KEY)
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch {
+    return false
+  }
+}
+
 export async function loadFromIDB() {
   try {
     const db = await openDB()
