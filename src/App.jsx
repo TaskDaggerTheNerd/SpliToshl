@@ -632,6 +632,26 @@ async function deleteTransactionFromCloud(id) {
   return error
 }
 
+async function updateTransactionInCloud(tx, currentUser) {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      date: tx.date,
+      description: tx.description,
+      merchant: tx.merchant,
+      amount: tx.amount,
+      category: tx.category,
+      split: tx.split,
+      splitpaid: tx.splitPaid,
+      joint: tx.joint,
+      account: tx.account,
+    })
+    .eq('id', tx.id)
+    .eq('userid', currentUser.id)
+
+  return error
+}
+
   function importRows(rows, label) {
     const hasAccountFlag = rows.some((r) => r.account)
     if (hasAccountFlag) finishImport(rows, label, null)
@@ -943,13 +963,12 @@ async function saveEdit(id) {
   }
 
   const original = transactions.find((t) => t.id === id)
-
   if (!original) {
     setStatus('Transaction not found.')
     return
   }
 
-  const updatedTx = {
+  const updatedTransaction = {
     ...original,
     date: editDraft.date,
     description: editDraft.description.trim() || original.description,
@@ -959,18 +978,16 @@ async function saveEdit(id) {
     split: original.splitPaid ? false : Boolean(editDraft.split),
     splitPaid: Boolean(original.splitPaid),
     joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
-    jointMode:
-      original.account === 'joint'
-        ? 'full'
-        : Boolean(editDraft.joint)
-          ? original.jointMode || 'full'
-          : null,
+    jointMode: null,
+    account: original.account === 'joint'
+      ? 'joint'
+      : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
   }
 
   if (user) {
-    const error = await updateTransactionInCloud(updatedTx)
+    const error = await updateTransactionInCloud(updatedTransaction, user)
     if (error) {
-      setStatus(`Cloud update failed: ${error.message}`)
+      setStatus(`Cloud save failed: ${error.message}`)
       return
     }
   }
@@ -980,7 +997,7 @@ async function saveEdit(id) {
 
   setTransactions((prev) =>
     prev.map((t) => {
-      if (t.id === id) return updatedTx
+      if (t.id === id) return updatedTransaction
 
       if (categoryChanged && originalDescription && t.description === originalDescription) {
         return { ...t, category: editDraft.category || 'Other' }
@@ -997,15 +1014,13 @@ async function saveEdit(id) {
 
     if (matchCount > 0) {
       setStatus(
-        user
-          ? `Transaction updated and saved online. Category ${editDraft.category || 'Other'} applied to ${matchCount + 1} transactions with description "${originalDescription}".`
-          : `Transaction updated. Category ${editDraft.category || 'Other'} applied to ${matchCount + 1} transactions with description "${originalDescription}".`
+        `Updated. Category ${editDraft.category || 'Other'} applied to ${matchCount + 1} transactions with description "${originalDescription}".`
       )
     } else {
-      setStatus(user ? 'Transaction updated and saved online.' : 'Transaction updated.')
+      setStatus('Transaction updated.')
     }
   } else {
-    setStatus(user ? 'Transaction updated and saved online.' : 'Transaction updated.')
+    setStatus('Transaction updated.')
   }
 
   cancelEdit()
