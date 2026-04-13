@@ -614,7 +614,7 @@ export default function App() {
   return error
 }
 
-async function updateTransactionInCloud(tx, currentUser) {
+async function updateTransactionInCloud(tx) {
   const { error } = await supabase
     .from('transactions')
     .update({
@@ -630,17 +630,15 @@ async function updateTransactionInCloud(tx, currentUser) {
       account: tx.account,
     })
     .eq('id', tx.id)
-    .eq('userid', currentUser.id)
 
   return error
 }
 
-async function deleteTransactionFromCloud(id, currentUser) {
+async function deleteTransactionFromCloud(id) {
   const { error } = await supabase
     .from('transactions')
     .delete()
     .eq('id', id)
-    .eq('userid', currentUser.id)
 
   return error
 }
@@ -961,7 +959,7 @@ async function saveEdit(id) {
   }
 
   if (user) {
-    const error = await updateTransactionInCloud(updatedTx, user)
+    const error = await updateTransactionInCloud(updatedTx)
     if (error) {
       setStatus(`Cloud update failed: ${error.message}`)
       return
@@ -1006,7 +1004,7 @@ async function saveEdit(id) {
 
 async function deleteTransaction(id) {
   if (user) {
-    const error = await deleteTransactionFromCloud(id, user)
+    const error = await deleteTransactionFromCloud(id)
     if (error) {
       setStatus(`Cloud delete failed: ${error.message}`)
       return
