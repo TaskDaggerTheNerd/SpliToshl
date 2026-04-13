@@ -577,18 +577,18 @@ export default function App() {
     }
 
     const mapped = allRows.map((t) => ({
-      id: t.id,
-      date: t.date,
-      description: t.description,
-      merchant: t.merchant || t.description,
-      amount: Number(t.amount || 0),
-      category: t.category || 'Other',
-      split: Boolean(t.split),
-      splitPaid: Boolean(t.split_paid),
-      joint: Boolean(t.joint),
-      jointMode: t.joint_mode || null,
-      account: t.account || 'personal',
-    }))
+  id: t.id,
+  date: t.date,
+  description: t.description,
+  merchant: t.merchant || t.description,
+  amount: Number(t.amount || 0),
+  category: t.category || 'Other',
+  split: Boolean(t.split),
+  splitPaid: Boolean(t.splitpaid),
+  joint: Boolean(t.joint),
+  jointMode: null,
+  account: t.account || 'personal',
+}))
 
     const normalized = dedup(normalizeTransactions(mapped))
     setTransactions(normalized)
@@ -607,7 +607,6 @@ export default function App() {
     split: tx.split,
     splitpaid: tx.splitPaid,
     joint: tx.joint,
-    jointmode: tx.jointMode,
     account: tx.account,
   })
 
@@ -626,7 +625,6 @@ async function updateTransactionInCloud(tx) {
       split: tx.split,
       splitpaid: tx.splitPaid,
       joint: tx.joint,
-      jointmode: tx.jointMode,
       account: tx.account,
     })
     .eq('id', tx.id)
@@ -677,19 +675,18 @@ async function deleteTransactionFromCloud(id) {
 
     if (user) {
       const payload = enriched.map((t) => ({
-        id: t.id,
-        user_id: user.id,
-        date: t.date,
-        description: t.description,
-        merchant: t.merchant || t.description,
-        amount: Number(t.amount || 0),
-        category: t.category || 'Other',
-        split: Boolean(t.split),
-        split_paid: Boolean(t.splitPaid),
-        joint: Boolean(t.joint),
-        joint_mode: t.jointMode || null,
-        account: t.account || 'personal',
-      }))
+  id: t.id,
+  userid: user.id,
+  date: t.date,
+  description: t.description,
+  merchant: t.merchant || t.description,
+  amount: Number(t.amount || 0),
+  category: t.category || 'Other',
+  split: Boolean(t.split),
+  splitpaid: Boolean(t.splitPaid),
+  joint: Boolean(t.joint),
+  account: t.account || 'personal',
+}))
 
       const { error } = await supabase.from('transactions').upsert(payload, { onConflict: 'id' })
 
