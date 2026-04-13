@@ -496,42 +496,45 @@ export default function App() {
   const hasData = transactions.length > 0
 
   async function signInWithNamePassword(username, password) {
-    const cleanUsername = String(username || '').trim().toLowerCase()
-    const cleanPassword = String(password || '').trim()
+  const cleanUsername = String(username || '').trim().toLowerCase()
+  const cleanPassword = String(password || '').trim()
 
-    if (!cleanUsername || !cleanPassword) {
-      setStatus('Enter name and password.')
-      return
-    }
-
-    const { data, error } = await supabase
-      .from('app_users')
-      .select('*')
-      .eq('username', cleanUsername)
-      .eq('password', cleanPassword)
-      .maybeSingle()
-
-    if (error) {
-      setStatus(`Login failed: ${error.message}`)
-      return
-    }
-
-    if (!data) {
-      setStatus('Invalid name or password.')
-      return
-    }
-
-    const appUser = {
-      id: data.id,
-      username: data.username,
-      displayName: data.display_name || data.username,
-    }
-
-    setUser(appUser)
-    setLoginPassword('')
-    setStatus(`Signed in as ${appUser.displayName}.`)
-    await loadTransactionsFromCloud(appUser)
+  if (!cleanUsername || !cleanPassword) {
+    setStatus('Enter name and password.')
+    return
   }
+
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('*')
+    .ilike('username', cleanUsername)
+    .eq('password', cleanPassword)
+
+  console.log('LOGIN DEBUG', { cleanUsername, cleanPassword, data, error })
+
+  if (error) {
+    setStatus(`Login failed: ${error.message}`)
+    return
+  }
+
+  if (!data || data.length === 0) {
+    setStatus('No matching user found in app_users.')
+    return
+  }
+
+  const row = data[0]
+
+  const appUser = {
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name || row.username,
+  }
+
+  setUser(appUser)
+  setLoginPassword('')
+  setStatus(`Signed in as ${appUser.displayName}.`)
+  await loadTransactionsFromCloud(appUser)
+}
 
   function signOutUser() {
     setUser(null)
