@@ -2,8 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
 } from 'recharts'
 import {
   normalizeTransactions,
@@ -16,10 +27,32 @@ import {
   DEFAULTCATEGORIES,
 } from './utils'
 import { saveToIDB, loadFromIDB, exportJSON, importJSON } from './storage'
+import { supabase } from './supabase'
 import { generatePDFReport } from './report'
 
-const PALETTE = ['#01696f', '#e9c46a', '#f4a261', '#e76f51', '#264653', '#8ab17d', '#6d597a', '#577590', '#bc4749', '#a8dadc']
-const TABS = ['Own','Joint','Trends','Forecast','Merchants','Subscriptions','Transactions','Splits']
+const PALETTE = [
+  '#01696f',
+  '#e9c46a',
+  '#f4a261',
+  '#e76f51',
+  '#264653',
+  '#8ab17d',
+  '#6d597a',
+  '#577590',
+  '#bc4749',
+  '#a8dadc',
+]
+
+const TABS = [
+  'Own',
+  'Joint',
+  'Trends',
+  'Forecast',
+  'Merchants',
+  'Subscriptions',
+  'Transactions',
+  'Splits',
+]
 
 const MoonIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -44,10 +77,10 @@ const EmptyState = ({ message = 'Upload a CSV or Excel (.xlsx) file to get start
   </div>
 )
 
-function parseXLSX(file) {
+function parseXLSXfile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = e => {
+    reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result)
         const workbook = XLSX.read(data, { type: 'array', cellDates: true })
@@ -64,15 +97,15 @@ function parseXLSX(file) {
   })
 }
 
-function parseCSV(file) {
+function parseCSVfile(file) {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      delimiter: '',
+      delimiter: ',',
       encoding: 'UTF-8',
-      complete: ({ data }) => resolve(data || []),
-      error: err => reject(new Error(err.message)),
+      complete: ({ data }) => resolve(data),
+      error: (err) => reject(new Error(err.message)),
     })
   })
 }
@@ -86,21 +119,29 @@ export default function App() {
   const [transactions, setTransactions] = useState([])
   const [activeTab, setActiveTab] = useState('Own')
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('Import a CSV or Excel (.xlsx) file to start.')
-  const [darkMode, setDarkMode] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640)
-
+  const [status, setStatus] = useState('Import a CSV or Excel .xlsx file to start.')
+  const [darkMode, setDarkMode] = useState(window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
   const [dateFilter, setDateFilter] = useState('')
   const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
   const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
-
   const [editingId, setEditingId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ date: '', description: '', category: '', amount: '', split: false, joint: false,})
-
+  const [editDraft, setEditDraft] = useState({
+    date: '',
+    description: '',
+    category: '',
+    amount: '',
+    split: false,
+    joint: false,
+  })
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
+
+  const [user, setUser] = useState(null)
+  const [loginName, setLoginName] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [manualDraft, setManualDraft] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -111,197 +152,145 @@ export default function App() {
     joint: false,
   })
 
-  
-
   const fileRef = useRef(null)
   const jsonRef = useRef(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
-  useEffect(() => {
-  const onResize = () => setIsMobile(window.innerWidth <= 640)
-  window.addEventListener('resize', onResize)
-  return () => window.removeEventListener('resize', onResize)
-}, [])
 
-  // Load from IndexedDB once on mount
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   useEffect(() => {
     ;(async () => {
       const saved = await loadFromIDB()
       if (saved?.transactions?.length) {
         const normalized = dedup(normalizeTransactions(saved.transactions))
         setTransactions(normalized)
-        setStatus(`Loaded ${normalized.length} saved transactions.`)
+        setStatus(`Loaded ${normalized.length} saved local transactions.`)
       }
     })()
   }, [])
 
-  // Persist to IndexedDB whenever transactions change
   useEffect(() => {
     saveToIDB({ transactions })
   }, [transactions])
 
-  // My personal share of every transaction
-const myTransactions = useMemo(
-  () =>
-    transactions.map((t) => {
-      const amount = Math.abs(Number(t.amount) || 0)
+  const myTransactions = useMemo(() => {
+    return transactions.map((t) => {
+      const amount = Math.abs(Number(t.amount || 0))
       const isJoint = t.account === 'joint' || t.joint
       const myAmount = isJoint ? amount / 2 : amount
+      return { ...t, myAmount }
+    })
+  }, [transactions])
 
-      return {
-        ...t,
-        myAmount,
-      }
-    }),
-  [transactions]
-)
-
-// Joint tab: only rows from the joint account, shown at FULL cost
-const jointTransactions = useMemo(
-  () =>
-    transactions
+  const jointTransactions = useMemo(() => {
+    return transactions
       .filter((t) => t.account === 'joint' || t.joint)
       .map((t) => {
-        const amount = Math.abs(Number(t.amount) || 0)
+        const amount = Math.abs(Number(t.amount || 0))
+        return { ...t, jointAmount: amount }
+      })
+  }, [transactions])
 
-        return {
-          ...t,
-          jointAmount: amount,
-        }
-      }),
-  [transactions]
-)
+  const filteredJointTransactions = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return jointTransactions.filter((t) => {
+      const matchesQuery =
+        !q ||
+        [t.description, t.merchant, t.category, t.date, String(t.amount)]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
 
-const filteredJointTransactions = useMemo(() => {
-  const q = query.trim().toLowerCase()
+      const matchesDate = !dateFilter || String(t.date).startsWith(dateFilter)
+      const matchesCategory =
+        transactionCategoryFilter === 'all' || (t.category || 'Other') === transactionCategoryFilter
 
-  return jointTransactions.filter((t) => {
-    const matchesQuery =
-      !q ||
-      [
-        t.description,
-        t.merchant,
-        t.category,
-        t.date,
-        String(t.amount),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
+      return matchesQuery && matchesDate && matchesCategory
+    })
+  }, [jointTransactions, query, dateFilter, transactionCategoryFilter])
 
-    const matchesDate =
-      !dateFilter || String(t.date || '').startsWith(dateFilter)
+  const jointTotal = useMemo(() => {
+    return filteredJointTransactions.reduce((s, t) => s + Number(t.jointAmount || 0), 0)
+  }, [filteredJointTransactions])
 
-    const matchesCategory =
-      transactionCategoryFilter === 'all' ||
-      (t.category || 'Other') === transactionCategoryFilter
+  const jointCategoryData = useMemo(() => {
+    const m = new Map()
+    filteredJointTransactions.forEach((t) => {
+      m.set(t.category, (m.get(t.category) || 0) + Number(t.jointAmount || 0))
+    })
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }))
+  }, [filteredJointTransactions])
 
-    return matchesQuery && matchesDate && matchesCategory
-  })
-}, [jointTransactions, query, dateFilter, transactionCategoryFilter])
+  const jointMonthData = useMemo(() => {
+    const m = new Map()
+    filteredJointTransactions.forEach((t) => {
+      const key = String(t.date).slice(0, 7)
+      if (key.length === 7) m.set(key, (m.get(key) || 0) + Number(t.jointAmount || 0))
+    })
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, value]) => ({ name, value }))
+  }, [filteredJointTransactions])
 
-const jointTotal = useMemo(
-  () =>
-    filteredJointTransactions.reduce(
-      (s, t) => s + Number(t.jointAmount || 0),
-      0
-    ),
-  [filteredJointTransactions]
-)
-
-const jointCategoryData = useMemo(() => {
-  const m = new Map()
-
-  filteredJointTransactions.forEach((t) => {
-    m.set(t.category, (m.get(t.category) || 0) + Number(t.jointAmount || 0))
-  })
-
-  return [...m.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, value]) => ({ name, value }))
-}, [filteredJointTransactions])
-
-const jointMonthData = useMemo(() => {
-  const m = new Map()
-
-  filteredJointTransactions.forEach((t) => {
-    const key = String(t.date).slice(0, 7)
-    if (key.length === 7) {
-      m.set(key, (m.get(key) || 0) + Number(t.jointAmount || 0))
-    }
-  })
-
-  return [...m.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, value]) => ({ name, value }))
-}, [filteredJointTransactions])
-
-  // Filtered list (using my share)
   const filtered = useMemo(() => {
-  const q = query.trim().toLowerCase()
+    const q = query.trim().toLowerCase()
+    return myTransactions.filter((t) => {
+      const matchesQuery =
+        !q ||
+        [t.description, t.merchant, t.category, t.date, String(t.amount)]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
 
-  return myTransactions.filter((t) => {
-    const matchesQuery =
-      !q ||
-      [
-        t.description,
-        t.merchant,
-        t.category,
-        t.date,
-        String(t.amount),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
+      const matchesDate = !dateFilter || String(t.date).startsWith(dateFilter)
+      const matchesTransactionCategory =
+        transactionCategoryFilter === 'all' || (t.category || 'Other') === transactionCategoryFilter
 
-    const matchesDate =
-      !dateFilter || String(t.date || '').startsWith(dateFilter)
+      return matchesQuery && matchesDate && matchesTransactionCategory
+    })
+  }, [myTransactions, query, dateFilter, transactionCategoryFilter])
 
-    const matchesTransactionCategory =
-      transactionCategoryFilter === 'all' ||
-      (t.category || 'Other') === transactionCategoryFilter
-
-    return matchesQuery && matchesDate && matchesTransactionCategory
-  })
-}, [myTransactions, query, dateFilter, transactionCategoryFilter])
-
-const overviewFiltered = useMemo(() => {
-  return myTransactions.filter((t) => {
-    return (
-      overviewCategoryFilter === 'all' ||
-      (t.category || 'Other') === overviewCategoryFilter
-    )
-  })
-}, [myTransactions, overviewCategoryFilter])
+  const overviewFiltered = useMemo(() => {
+    return myTransactions.filter((t) => {
+      return overviewCategoryFilter === 'all' || (t.category || 'Other') === overviewCategoryFilter
+    })
+  }, [myTransactions, overviewCategoryFilter])
 
   const sortedTransactions = useMemo(() => {
     const arr = [...filtered]
     const { key, direction } = sortConfig
     const dir = direction === 'asc' ? 1 : -1
+
     arr.sort((a, b) => {
       if (key === 'amount') {
-        const av = Number(a.amount) || 0
-        const bv = Number(b.amount) || 0
+        const av = Number(a.amount || 0)
+        const bv = Number(b.amount || 0)
         return (av - bv) * dir
       }
+
       if (key === 'date') {
-        const av = a.date || ''
-        const bv = b.date || ''
+        const av = a.date
+        const bv = b.date
         if (av < bv) return -1 * dir
         if (av > bv) return 1 * dir
         return 0
       }
-      const av = (a[key] || '').toString().toLowerCase()
-      const bv = (b[key] || '').toString().toLowerCase()
+
+      const av = (a[key] ?? '').toString().toLowerCase()
+      const bv = (b[key] ?? '').toString().toLowerCase()
       return av.localeCompare(bv) * dir
     })
+
     return arr
   }, [filtered, sortConfig])
 
   function handleSort(key) {
-    setSortConfig(prev => {
+    setSortConfig((prev) => {
       if (prev.key === key) {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
       }
@@ -310,162 +299,138 @@ const overviewFiltered = useMemo(() => {
   }
 
   const sortedJointTransactions = useMemo(() => {
-  const arr = [...filteredJointTransactions]
-  const { key, direction } = jointSortConfig
-  const dir = direction === 'asc' ? 1 : -1
+    const arr = [...filteredJointTransactions]
+    const { key, direction } = jointSortConfig
+    const dir = direction === 'asc' ? 1 : -1
 
-  arr.sort((a, b) => {
-    if (key === 'amount') {
-      const av = Number(a.jointAmount ?? a.amount ?? 0)
-      const bv = Number(b.jointAmount ?? b.amount ?? 0)
-      return (av - bv) * dir
-    }
-
-    if (key === 'date') {
-      const av = a.date
-      const bv = b.date
-      if (av < bv) return -1 * dir
-      if (av > bv) return 1 * dir
-      return 0
-    }
-
-    const av = (a[key] ?? '').toString().toLowerCase()
-    const bv = (b[key] ?? '').toString().toLowerCase()
-    return av.localeCompare(bv) * dir
-  })
-
-  return arr
-}, [filteredJointTransactions, jointSortConfig])
-
-function handleJointSort(key) {
-  setJointSortConfig(prev => {
-    if (prev.key === key) {
-      return {
-        key,
-        direction: prev.direction === 'asc' ? 'desc' : 'asc',
+    arr.sort((a, b) => {
+      if (key === 'amount') {
+        const av = Number(a.jointAmount ?? a.amount ?? 0)
+        const bv = Number(b.jointAmount ?? b.amount ?? 0)
+        return (av - bv) * dir
       }
-    }
-    return {
-      key,
-      direction: key === 'date' ? 'desc' : 'asc',
-    }
-  })
-}
 
-  const myTotalSpend = useMemo(
-  () => filtered.reduce((s, t) => s + (Number(t.myAmount) || 0), 0),
-  [filtered]
-)
+      if (key === 'date') {
+        const av = a.date
+        const bv = b.date
+        if (av < bv) return -1 * dir
+        if (av > bv) return 1 * dir
+        return 0
+      }
+
+      const av = (a[key] ?? '').toString().toLowerCase()
+      const bv = (b[key] ?? '').toString().toLowerCase()
+      return av.localeCompare(bv) * dir
+    })
+
+    return arr
+  }, [filteredJointTransactions, jointSortConfig])
+
+  function handleJointSort(key) {
+    setJointSortConfig((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+      }
+      return { key, direction: key === 'date' ? 'desc' : 'asc' }
+    })
+  }
+
+  const myTotalSpend = useMemo(() => filtered.reduce((s, t) => s + Number(t.myAmount || 0), 0), [filtered])
 
   const categoryData = useMemo(() => {
-  const m = new Map()
-  filtered.forEach(t => {
-    m.set(t.category, (m.get(t.category) || 0) + (Number(t.myAmount) || 0))
-  })
-  return [...m.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, value]) => ({ name, value }))
-}, [filtered])
+    const m = new Map()
+    filtered.forEach((t) => {
+      m.set(t.category, (m.get(t.category) || 0) + Number(t.myAmount || 0))
+    })
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }))
+  }, [filtered])
 
   const merchantData = useMemo(() => {
-  const m = new Map()
-
-  overviewFiltered.forEach((t) => {
-    const key = t.merchant || t.description || 'Unknown'
-    m.set(key, (m.get(key) || 0) + Number(t.myAmount || 0))
-  })
-
-  return [...m.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15)
-    .map(([name, value]) => ({ name, value }))
-}, [overviewFiltered])
+    const m = new Map()
+    overviewFiltered.forEach((t) => {
+      const key = t.merchant || t.description || 'Unknown'
+      m.set(key, (m.get(key) || 0) + Number(t.myAmount || 0))
+    })
+    return [...m.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([name, value]) => ({ name, value }))
+  }, [overviewFiltered])
 
   const monthData = useMemo(() => {
-  const m = new Map()
-  filtered.forEach(t => {
-    const key = String(t.date || '').slice(0, 7)
-    if (key.length === 7) {
-      m.set(key, (m.get(key) || 0) + (Number(t.myAmount) || 0))
-    }
-  })
-  return [...m.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, value]) => ({ name, value }))
-}, [filtered])
+    const m = new Map()
+    filtered.forEach((t) => {
+      const key = String(t.date).slice(0, 7)
+      if (key.length === 7) m.set(key, (m.get(key) || 0) + Number(t.myAmount || 0))
+    })
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, value]) => ({ name, value }))
+  }, [filtered])
 
-    const forecast = useMemo(
-  () => buildForecast(myTransactions.map(t => ({ ...t, amount: t.myAmount }))),
-  [myTransactions]
-)
-  const splitSummary  = useMemo(() => buildSplitSummary(transactions), [transactions])
-  const splitRows     = useMemo(
-    () => [...splitSummary.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([month, owed]) => ({ month, owed })),
-    [splitSummary]
+  const forecast = useMemo(
+    () => buildForecast(myTransactions.map((t) => ({ ...t, amount: t.myAmount }))),
+    [myTransactions]
   )
-  const splitTotal    = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0),
-  [splitRows])
+
+  const splitSummary = useMemo(() => buildSplitSummary(transactions), [transactions])
+
+  const splitRows = useMemo(() => {
+    return [...splitSummary.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, owed]) => ({ month, owed }))
+  }, [splitSummary])
+
+  const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [splitRows])
 
   const splitBreakdownByMonthCategory = useMemo(() => {
-  const rows = transactions
-    .filter(t => t.split)
-    .map(t => ({
-      month: getMonthKey(t.date),
-      category: t.category || 'Other',
-      owed: Math.abs(Number(t.amount) || 0) / 2,
-    }))
-    .filter(r => r.month)
+    const rows = transactions
+      .filter((t) => t.split)
+      .map((t) => ({
+        month: getMonthKey(t.date),
+        category: t.category || 'Other',
+        owed: Math.abs(Number(t.amount || 0)) / 2,
+      }))
+      .filter((r) => r.month)
 
-  const grouped = new Map()
-
-  rows.forEach(r => {
-    const key = `${r.month}__${r.category}`
-    const current = grouped.get(key) || 0
-    grouped.set(key, current + r.owed)
-  })
-
-  return [...grouped.entries()]
-    .map(([key, owed]) => {
-      const [month, category] = key.split('__')
-      return { month, category, owed }
+    const grouped = new Map()
+    rows.forEach((r) => {
+      const key = `${r.month}|${r.category}`
+      grouped.set(key, (grouped.get(key) || 0) + r.owed)
     })
-    .sort((a, b) => {
-      if (a.month !== b.month) return a.month.localeCompare(b.month)
-      return a.category.localeCompare(b.category)
-    })
-}, [transactions])
 
-  // --- subscription helpers (must be BEFORE subscriptions useMemo) ---
+    return [...grouped.entries()]
+      .map(([key, owed]) => {
+        const [month, category] = key.split('|')
+        return { month, category, owed }
+      })
+      .sort((a, b) => {
+        if (a.month !== b.month) return a.month.localeCompare(b.month)
+        return a.category.localeCompare(b.category)
+      })
+  }, [transactions])
 
-  const getSubscriptionKeyFromDescription = (description = '') => {
-    const d = String(description).toLowerCase()
-    // try to match a known subscription brand word first
+  const getSubscriptionKeyFromDescription = (description) => {
+    const d = String(description || '').toLowerCase()
     const m = d.match(
       /netflix|spotify|prime video|amazon prime|apple tv|apple music|hbo|disney|paramount|youtube|icloud|dropbox|dazn|patreon|subscription/i
     )
     if (m) return m[0].toLowerCase()
-    // fallback: first word
-    const first = d.trim().split(/\s+/)[0]
-    return first || d || 'subscription'
+    const first = d.trim().split(' ')[0]
+    return first || 'subscription'
   }
 
   const isSubscriptionCandidate = (t) => {
     const d = String(t.description || '')
-    return /netflix|spotify|prime|apple|hbo|disney|subscription|adobe|microsoft|google one|icloud|dropbox|urban sports|revolut|youtube/i.test(d)
+    return /netflix|spotify|prime|apple|hbo|disney|subscription|adobe|microsoft|google one|icloud|dropbox|urban sports|revolut|youtube/i.test(
+      d
+    )
   }
 
-      const subscriptions = useMemo(() => {
+  const subscriptions = useMemo(() => {
     const now = new Date()
-    const currentMonthKey = `${now.getFullYear()}-${String(
-      now.getMonth() + 1
-    ).padStart(2, '0')}`
-
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const candidates = filtered.filter(isSubscriptionCandidate)
-
-    // group by subscription key (service name)
     const groups = new Map()
+
     for (const t of candidates) {
       const key = getSubscriptionKeyFromDescription(t.description)
       if (!groups.has(key)) groups.set(key, [])
@@ -480,12 +445,11 @@ function handleJointSort(key) {
 
     const summaries = []
 
-    for (const [subKey, txs] of groups.entries()) {
+    for (const [, txs] of groups.entries()) {
       if (!txs.length) continue
 
-      // sort newest → oldest
       const sorted = txs
-        .filter(t => t.date)
+        .filter((t) => t.date)
         .slice()
         .sort((a, b) => (a.date > b.date ? -1 : 1))
 
@@ -497,38 +461,29 @@ function handleJointSort(key) {
       if (!lastMonth) continue
 
       const diff = monthDiff(currentMonthKey, lastMonth)
-      const status = diff >= 2 ? 'over' : 'active' // over only if 2 months with no charge
-
-      // total spent historically for this service
-      const totalAmount = txs.reduce(
-        (sum, t) => sum + Math.abs(Number(t.amount) || 0),
-        0
-      )
-
-      const lastAmount = Math.abs(Number(latest.amount) || 0)
+      const subscriptionStatus = diff >= 2 ? 'over' : 'active'
+      const totalAmount = txs.reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0)
+      const lastAmount = Math.abs(Number(latest.amount || 0))
 
       summaries.push({
-        ...latest,                // keeps id, date, description, category, amount, split
-        subscriptionStatus: status,
+        ...latest,
+        subscriptionStatus,
         totalAmount,
         lastAmount,
       })
     }
 
-    // newest subscriptions first
     summaries.sort((a, b) => {
-      const ad = a.date || ''
-      const bd = b.date || ''
-      if (ad < bd) return 1
-      if (ad > bd) return -1
+      if (a.date < b.date) return 1
+      if (a.date > b.date) return -1
       return 0
     })
 
     return summaries
   }, [filtered])
 
-    const categoryOptions = useMemo(() => {
-    const existing = [...new Set(transactions.map(t => t.category).filter(Boolean))]
+  const categoryOptions = useMemo(() => {
+    const existing = [...new Set(transactions.map((t) => t.category).filter(Boolean))]
     return [...new Set([...DEFAULTCATEGORIES, ...existing])].sort((a, b) => a.localeCompare(b))
   }, [transactions])
 
@@ -540,333 +495,486 @@ function handleJointSort(key) {
 
   const hasData = transactions.length > 0
 
-function importRows(rows, label) {
-  const hasAccountFlag = rows.some(r => r.account)
+  async function signInWithNamePassword(username, password) {
+    const cleanUsername = String(username || '').trim().toLowerCase()
+    const cleanPassword = String(password || '').trim()
 
-  if (hasAccountFlag) {
-    finishImport(rows, label, null)
-  } else {
-    setPendingImport({ rows, label })
-  }
-}
-
-function finishImport(rows, label, accountType) {
-  const isJoint = accountType === 'joint'
-  const normalized = dedup(normalizeTransactions(rows))
-
-  if (normalized.length === 0) {
-    setStatus('No transactions found. Check file columns.')
-    setPendingImport(null)
-    return
-  }
-
-  const enriched = normalized.map((t) => ({
-    ...t,
-    account: t.account || (isJoint ? 'joint' : 'personal'),
-    split: t.account ? Boolean(t.split) : false,
-    joint: t.account === 'joint' ? true : (isJoint ? true : Boolean(t.joint)),
-    jointMode:
-      t.account === 'joint'
-        ? 'full'
-        : isJoint
-          ? 'full'
-          : (t.joint ? (t.jointMode || 'full') : null),
-  }))
-
-  const merged = dedup([...transactions, ...enriched])
-
-  if (merged.length === transactions.length) {
-    setStatus(`No new transactions found in ${label}; all were duplicates.`)
-    setPendingImport(null)
-    return
-  }
-
-  setTransactions(merged)
-  setEditingId(null)
-  setStatus(`Merged ${merged.length - transactions.length} new transactions from ${label}.`)
-  setActiveTab('Own')
-  setPendingImport(null)
-}
-
-async function handleFile(file) {
-  
-  if (!file) return
-  const ext = file.name.split('.').pop().toLowerCase()
-  setStatus(`Reading ${file.name}…`)
-  try {
-    if (ext === 'xlsx' || ext === 'xls') {
-      const rows = await parseXLSX(file)
-      importRows(rows, file.name)
-    } else if (ext === 'csv' || ext === 'txt') {
-      const rows = await parseCSV(file)
-      importRows(rows, file.name)
-    } else {
-      setStatus(`Unsupported file type ".${ext}". Please use .xlsx or .csv.`)
+    if (!cleanUsername || !cleanPassword) {
+      setStatus('Enter name and password.')
+      return
     }
-  } catch (err) {
-    setStatus(`Error reading file: ${err.message}`)
-  }
-}
 
-async function handleJSON(file) {
-  if (!file) return
-  try {
-    const data = await importJSON(file)
-    if (data?.transactions?.length) importRows(data.transactions, 'JSON')
-    else setStatus('JSON file has no transactions.')
-  } catch {
-    setStatus('Failed to parse JSON.')
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('*')
+      .eq('username', cleanUsername)
+      .eq('password', cleanPassword)
+      .maybeSingle()
+
+    if (error) {
+      setStatus(`Login failed: ${error.message}`)
+      return
+    }
+
+    if (!data) {
+      setStatus('Invalid name or password.')
+      return
+    }
+
+    const appUser = {
+      id: data.id,
+      username: data.username,
+      displayName: data.display_name || data.username,
+    }
+
+    setUser(appUser)
+    setLoginPassword('')
+    setStatus(`Signed in as ${appUser.displayName}.`)
+    await loadTransactionsFromCloud(appUser)
   }
-}
+
+  function signOutUser() {
+    setUser(null)
+    setTransactions([])
+    setLoginName('')
+    setLoginPassword('')
+    setEditingId(null)
+    setPendingImport(null)
+    setShowAddModal(false)
+    setStatus('Signed out.')
+  }
+
+  async function loadTransactionsFromCloud(currentUser) {
+    if (!currentUser?.id) return
+
+    const pageSize = 1000
+    let from = 0
+    let allRows = []
+    let keepLoading = true
+
+    while (keepLoading) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('date', { ascending: false })
+        .range(from, from + pageSize - 1)
+
+      if (error) {
+        setStatus(`Cloud load failed: ${error.message}`)
+        return
+      }
+
+      const rows = data || []
+      allRows = [...allRows, ...rows]
+
+      if (rows.length < pageSize) {
+        keepLoading = false
+      } else {
+        from += pageSize
+      }
+    }
+
+    const mapped = allRows.map((t) => ({
+      id: t.id,
+      date: t.date,
+      description: t.description,
+      merchant: t.merchant || t.description,
+      amount: Number(t.amount || 0),
+      category: t.category || 'Other',
+      split: Boolean(t.split),
+      splitPaid: Boolean(t.split_paid),
+      joint: Boolean(t.joint),
+      jointMode: t.joint_mode || null,
+      account: t.account || 'personal',
+    }))
+
+    const normalized = dedup(normalizeTransactions(mapped))
+    setTransactions(normalized)
+    setStatus(`Loaded ${normalized.length} cloud transactions for ${currentUser.displayName || currentUser.username}.`)
+  }
+
+  async function addTransactionToCloud(tx, currentUser) {
+    const { error } = await supabase.from('transactions').insert({
+      id: tx.id,
+      user_id: currentUser.id,
+      date: tx.date,
+      description: tx.description,
+      merchant: tx.merchant,
+      amount: tx.amount,
+      category: tx.category,
+      split: tx.split,
+      split_paid: tx.splitPaid,
+      joint: tx.joint,
+      joint_mode: tx.jointMode,
+      account: tx.account,
+    })
+
+    return error
+  }
+
+  function importRows(rows, label) {
+    const hasAccountFlag = rows.some((r) => r.account)
+    if (hasAccountFlag) finishImport(rows, label, null)
+    else setPendingImport({ rows, label })
+  }
+
+  async function finishImport(rows, label, accountType) {
+    const isJoint = accountType === 'joint'
+    const normalized = dedup(normalizeTransactions(rows))
+
+    if (normalized.length === 0) {
+      setStatus('No transactions found. Check file columns.')
+      setPendingImport(null)
+      return
+    }
+
+    const enriched = normalized.map((t) => ({
+      ...t,
+      account: t.account || (isJoint ? 'joint' : 'personal'),
+      split: t.account ? Boolean(t.split) : false,
+      joint: t.account === 'joint' ? true : isJoint ? true : Boolean(t.joint),
+      jointMode: t.account === 'joint' ? 'full' : isJoint ? 'full' : t.joint ? t.jointMode || 'full' : null,
+    }))
+
+    const merged = dedup([...transactions, ...enriched])
+
+    if (merged.length === transactions.length) {
+      setStatus(`No new transactions found in ${label}; all were duplicates.`)
+      setPendingImport(null)
+      return
+    }
+
+    if (user) {
+      const payload = enriched.map((t) => ({
+        id: t.id,
+        user_id: user.id,
+        date: t.date,
+        description: t.description,
+        merchant: t.merchant || t.description,
+        amount: Number(t.amount || 0),
+        category: t.category || 'Other',
+        split: Boolean(t.split),
+        split_paid: Boolean(t.splitPaid),
+        joint: Boolean(t.joint),
+        joint_mode: t.jointMode || null,
+        account: t.account || 'personal',
+      }))
+
+      const { error } = await supabase.from('transactions').upsert(payload, { onConflict: 'id' })
+
+      if (error) {
+        setStatus(`Imported locally, but cloud save failed: ${error.message}`)
+        setTransactions(merged)
+        setEditingId(null)
+        setActiveTab('Own')
+        setPendingImport(null)
+        return
+      }
+    }
+
+    setTransactions(merged)
+    setEditingId(null)
+    setStatus(
+      user
+        ? `Merged ${merged.length - transactions.length} new transactions from ${label} and saved online.`
+        : `Merged ${merged.length - transactions.length} new transactions from ${label}.`
+    )
+    setActiveTab('Own')
+    setPendingImport(null)
+  }
+
+  async function handleFile(file) {
+    if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    setStatus(`Reading ${file.name}...`)
+
+    try {
+      if (ext === 'xlsx' || ext === 'xls') {
+        const rows = await parseXLSXfile(file)
+        importRows(rows, file.name)
+      } else if (ext === 'csv' || ext === 'txt') {
+        const rows = await parseCSVfile(file)
+        importRows(rows, file.name)
+      } else {
+        setStatus(`Unsupported file type ".${ext}". Please use .xlsx or .csv.`)
+      }
+    } catch (err) {
+      setStatus(`Error reading file: ${err.message}`)
+    }
+  }
+
+  async function handleJSONfile(file) {
+    if (!file) return
+
+    try {
+      const data = await importJSON(file)
+      if (data?.transactions?.length) {
+        await importRows(data.transactions, 'JSON')
+        setStatus(`Imported ${data.transactions.length} transactions from JSON.`)
+      } else {
+        setStatus('JSON file has no transactions.')
+      }
+    } catch (err) {
+      setStatus(`Failed to parse JSON: ${err.message}`)
+    }
+  }
 
   function handleExport() {
     exportJSON({ transactions }, 'expense-data.json').then(() => setStatus('JSON exported.'))
   }
 
   function handlePDF() {
-  generatePDFReport(transactions)
-  setStatus('PDF downloaded.')
-}
+    generatePDFReport(transactions)
+    setStatus('PDF downloaded.')
+  }
 
   function handleClear() {
-  if (!transactions.length) {
-    setStatus('There is no data to clear.')
-    return
+    if (!transactions.length) {
+      setStatus('There is no data to clear.')
+      return
+    }
+
+    const ok = window.confirm(
+      'This will remove all imported transactions from this browser. Are you sure you want to clear everything?'
+    )
+
+    if (!ok) {
+      setStatus('Clear cancelled.')
+      return
+    }
+
+    setTransactions([])
+    setEditingId(null)
+    setStatus('All data cleared.')
   }
 
-  const ok = window.confirm(
-    'This will remove all imported transactions from this browser. Are you sure you want to clear everything?'
-  )
-
-  if (!ok) {
-    setStatus('Clear cancelled.')
-    return
-  }
-
-  setTransactions([])
-  setEditingId(null)
-  setStatus('All data cleared.')
-}
-
-function openManualAdd() {
-  setManualDraft({
-    date: new Date().toISOString().slice(0, 10),
-    description: '',
-    category: 'Other',
-    amount: '',
-    split: false,
-    joint: false,
-  })
-  setShowAddModal(true)
-}
-
-function closeManualAdd() {
-  setShowAddModal(false)
-}
-
-function saveManualExpense() {
-  const amount = Number(String(manualDraft.amount).replace(',', '.'))
-
-  if (!manualDraft.date) {
-    setStatus('Date is required.')
-    return
-  }
-
-  if (!manualDraft.description.trim()) {
-    setStatus('Description is required.')
-    return
-  }
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    setStatus('Amount must be a valid positive number.')
-    return
-  }
-
-  const newTransaction = {
-    id: `${manualDraft.date}-${manualDraft.description.trim()}-${amount}-${Date.now()}`,
-    date: manualDraft.date,
-    description: manualDraft.description.trim(),
-    merchant: manualDraft.description.trim(),
-    amount,
-    category: manualDraft.category || 'Other',
-    split: Boolean(manualDraft.split),
-    splitPaid: false,
-    joint: Boolean(manualDraft.joint),
-    jointMode: null,
-    account: manualDraft.joint ? 'personal' : 'personal',
-  }
-
-  setTransactions((prev) => dedup([...prev, newTransaction]))
-  setShowAddModal(false)
-  setEditingId(null)
-  setStatus('Manual expense added.')
-  setActiveTab('Transactions')
-}
-
-function markAllSplitsPaid() {
-  let changed = 0
-
-  setTransactions(prev =>
-    prev.map(t => {
-      if (t.split) {
-        changed++
-        return { ...t, split: false, splitPaid: true }
-      }
-      return t
+  function openManualAdd() {
+    setManualDraft({
+      date: new Date().toISOString().slice(0, 10),
+      description: '',
+      category: 'Other',
+      amount: '',
+      split: false,
+      joint: false,
     })
-  )
-
-  if (changed === 0) {
-    setStatus('No split transactions to mark as paid.')
-  } else {
-    setStatus(`Marked ${changed} split transactions as paid.`)
-  }
-}
-
-function toggleSplit(id) {
-  const tx = transactions.find(t => t.id === id)
-  if (!tx) return
-
-  if (tx.splitPaid) {
-    setStatus('This transaction was already split and paid in the past.')
-    return
+    setShowAddModal(true)
   }
 
-  setTransactions(prev =>
-    prev.map(t => (t.id === id ? { ...t, split: !t.split } : t))
-  )
-  setStatus('Split updated.')
-}
+  function closeManualAdd() {
+    setShowAddModal(false)
+  }
+
+  async function saveManualExpense() {
+    const rawAmount = String(manualDraft.amount ?? '').trim()
+    const normalizedAmount = rawAmount.replace(/\s/g, '').replace('€', '').replace(',', '.')
+    const amount = Number(normalizedAmount)
+
+    if (!manualDraft.date) {
+      setStatus('Date is required.')
+      return
+    }
+
+    if (!manualDraft.description.trim()) {
+      setStatus('Description is required.')
+      return
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setStatus('Amount must be a valid positive number.')
+      return
+    }
+
+    const newTransaction = {
+      id: `${manualDraft.date}-${manualDraft.description.trim()}-${amount}-${Date.now()}`,
+      date: manualDraft.date,
+      description: manualDraft.description.trim(),
+      merchant: manualDraft.description.trim(),
+      amount,
+      category: manualDraft.category || 'Other',
+      split: Boolean(manualDraft.split),
+      splitPaid: false,
+      joint: Boolean(manualDraft.joint),
+      jointMode: manualDraft.joint ? 'full' : null,
+      account: manualDraft.joint ? 'joint' : 'personal',
+    }
+
+    if (user) {
+      const error = await addTransactionToCloud(newTransaction, user)
+      if (error) {
+        setStatus(`Cloud save failed: ${error.message}`)
+        return
+      }
+    }
+
+    setTransactions((prev) => dedup([...prev, newTransaction]))
+    setShowAddModal(false)
+    setEditingId(null)
+    setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+    setActiveTab('Transactions')
+  }
+
+  function markAllSplitsPaid() {
+    let changed = 0
+    setTransactions((prev) =>
+      prev.map((t) => {
+        if (t.split) {
+          changed += 1
+          return { ...t, split: false, splitPaid: true }
+        }
+        return t
+      })
+    )
+
+    if (changed === 0) setStatus('No split transactions to mark as paid.')
+    else setStatus(`Marked ${changed} split transactions as paid.`)
+  }
+
+  function toggleSplit(id) {
+    const tx = transactions.find((t) => t.id === id)
+    if (!tx) return
+
+    if (tx.splitPaid) {
+      setStatus('This transaction was already split and paid in the past.')
+      return
+    }
+
+    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, split: !t.split } : t)))
+    setStatus('Split updated.')
+  }
 
   function toggleJoint(id) {
-  const tx = transactions.find((t) => t.id === id)
-  if (!tx) return
+    const tx = transactions.find((t) => t.id === id)
+    if (!tx) return
 
-  if (tx.account === 'joint') {
-    setStatus('This transaction already comes from a Joint statement.')
-    return
-  }
+    if (tx.account === 'joint') {
+      setStatus('This transaction already comes from a Joint statement.')
+      return
+    }
 
-  if (tx.joint) {
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, joint: false, jointMode: null } : t
+    if (tx.joint) {
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, joint: false, jointMode: null } : t))
       )
-    )
-    setStatus('Removed from Joint tab.')
-    return
-  }
+      setStatus('Removed from Joint tab.')
+      return
+    }
 
-  setTransactions((prev) =>
-    prev.map((t) =>
-      t.id === id ? { ...t, joint: true, jointMode: null } : t
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, joint: true, jointMode: null } : t))
     )
-  )
-  setStatus('Added to Joint tab.')
-}
+    setStatus('Added to Joint tab.')
+  }
 
   function startEdit(t) {
-  setEditingId(t.id)
-  setEditDraft({
-    date: t.date,
-    description: t.description,
-    category: t.category || 'Other',
-    amount: String(t.amount ?? ''),
-    split: Boolean(t.split),
-    joint: Boolean(t.joint || t.account === 'joint'),
-  })
-}
+    setEditingId(t.id)
+    setEditDraft({
+      date: t.date,
+      description: t.description,
+      category: t.category || 'Other',
+      amount: String(t.amount ?? ''),
+      split: Boolean(t.split),
+      joint: Boolean(t.joint || t.account === 'joint'),
+    })
+  }
 
   function cancelEdit() {
-  setEditingId(null)
-  setEditDraft({
-    date: '',
-    description: '',
-    category: '',
-    amount: '',
-    split: false,
-    joint: false,
-  })
-}
+    setEditingId(null)
+    setEditDraft({
+      date: '',
+      description: '',
+      category: '',
+      amount: '',
+      split: false,
+      joint: false,
+    })
+  }
 
   function saveEdit(id) {
-  const amount = Number(String(editDraft.amount).replace(',', '.'))
+    const amount = Number(String(editDraft.amount).replace(',', '.'))
 
-  if (!editDraft.date) {
-    setStatus('Date is required.')
-    return
+    if (!editDraft.date) {
+      setStatus('Date is required.')
+      return
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setStatus('Amount must be a valid positive number.')
+      return
+    }
+
+    const original = transactions.find((t) => t.id === id)
+    const categoryChanged = original && original.category !== (editDraft.category || 'Other')
+    const originalDescription = original?.description
+
+    setTransactions((prev) =>
+      prev.map((t) => {
+        if (t.id === id) {
+          return {
+            ...t,
+            date: editDraft.date,
+            description: editDraft.description.trim() || t.description,
+            merchant: editDraft.description.trim() || t.merchant,
+            category: editDraft.category || 'Other',
+            amount,
+            split: t.splitPaid ? false : Boolean(editDraft.split),
+            splitPaid: Boolean(t.splitPaid),
+            joint: t.account === 'joint' ? true : Boolean(editDraft.joint),
+            jointMode: null,
+          }
+        }
+
+        if (categoryChanged && originalDescription && t.description === originalDescription) {
+          return { ...t, category: editDraft.category || 'Other' }
+        }
+
+        return t
+      })
+    )
+
+    if (categoryChanged && originalDescription) {
+      const matchCount = transactions.filter((t) => t.id !== id && t.description === originalDescription).length
+      if (matchCount > 0) {
+        setStatus(
+          `Updated. Category "${editDraft.category}" applied to ${matchCount + 1} transactions with description "${originalDescription}".`
+        )
+      } else {
+        setStatus('Transaction updated.')
+      }
+    } else {
+      setStatus('Transaction updated.')
+    }
+
+    cancelEdit()
   }
-
-  if (!Number.isFinite(amount) || amount < 0) {
-    setStatus('Amount must be a valid positive number.')
-    return
-  }
-
-  const original = transactions.find(t => t.id === id)
-  const categoryChanged = original && original.category !== (editDraft.category || 'Other')
-  const originalDescription = original?.description
-
-  setTransactions(prev =>
-    prev.map(t => {
-      if (t.id === id)
-        return {
-          ...t,
-          date: editDraft.date,
-          description: editDraft.description.trim() || t.description,
-          merchant: editDraft.description.trim() || t.merchant,
-          category: editDraft.category || 'Other',
-          amount,
-          split: t.splitPaid ? false : Boolean(editDraft.split),
-          splitPaid: Boolean(t.splitPaid),
-          joint: t.account === 'joint' ? true : Boolean(editDraft.joint),
-          jointMode: null,}
-
-      if (categoryChanged && originalDescription && t.description === originalDescription)
-        return { ...t, category: editDraft.category || 'Other' }
-
-      return t
-    })
-  )
-
-  if (categoryChanged && originalDescription) {
-    const matchCount = transactions.filter(t => t.id !== id && t.description === originalDescription).length
-    if (matchCount > 0)
-      setStatus(`Updated. Category "${editDraft.category}" applied to ${matchCount + 1} transactions with description "${originalDescription}".`)
-    else setStatus('Transaction updated.')
-  } else {
-    setStatus('Transaction updated.')
-  }
-
-  cancelEdit()
-}
 
   function deleteTransaction(id) {
-    setTransactions(prev => prev.filter(t => t.id !== id))
+    setTransactions((prev) => prev.filter((t) => t.id !== id))
     if (editingId === id) cancelEdit()
     setStatus('Transaction deleted.')
   }
 
   const forecastByCategory = useMemo(() => {
     const byMonth = new Map()
-    transactions.forEach(t => {
+
+    transactions.forEach((t) => {
       const month = getMonthKey(t.date)
       if (!month) return
       const cat = t.category || 'Other'
       const key = `${cat}|${month}`
-      byMonth.set(key, (byMonth.get(key) || 0) + Math.abs(Number(t.amount) || 0))
+      byMonth.set(key, (byMonth.get(key) || 0) + Math.abs(Number(t.amount || 0)))
     })
 
-    const months = [...new Set([...byMonth.keys()].map(k => k.split('|')[1]))].sort()
+    const months = [...new Set([...byMonth.keys()].map((k) => k.split('|')[1]))].sort()
     const last6 = months.slice(-6)
     if (last6.length === 0) return []
 
     const last6Set = new Set(last6)
     const catTotals = new Map()
+
     byMonth.forEach((val, key) => {
       const [cat, month] = key.split('|')
-      if (last6Set.has(month)) {
-        catTotals.set(cat, (catTotals.get(cat) || 0) + val)
-      }
+      if (last6Set.has(month)) catTotals.set(cat, (catTotals.get(cat) || 0) + val)
     })
 
     return [...catTotals.entries()].map(([category, total]) => {
@@ -878,91 +986,136 @@ function toggleSplit(id) {
 
   const mostExpensiveCategory = useMemo(() => {
     if (!forecastByCategory.length) return null
-    return forecastByCategory.reduce((max, row) =>
-      !max || row.avgPerMonth > max.avgPerMonth ? row : max,
-      null
-    )
+    return forecastByCategory.reduce((max, row) => (!max || row.avgPerMonth > max.avgPerMonth ? row : max), null)
   }, [forecastByCategory])
 
   const tt = {
-  contentStyle: {
-    background: 'var(--color-surface)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 8,
-  },
-  formatter: (v) => fmtEUR(v),
-}
+    contentStyle: {
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 8,
+    },
+    formatter: (v) => fmtEUR(v),
+  }
 
-const axisTick = { fontSize: isMobile ? 10 : 11, fill: 'var(--color-text-muted)' }
-const pieHeight = isMobile ? 220 : 260
-const chartHeight = isMobile ? 220 : 300
-const merchantChartHeight = isMobile ? 320 : 400
+  const axisTick = { fontSize: isMobile ? 10 : 11, fill: 'var(--color-text-muted)' }
+  const pieHeight = isMobile ? 220 : 260
+  const chartHeight = isMobile ? 220 : 300
+  const merchantChartHeight = isMobile ? 320 : 400
 
-return (
-  
-  <div className="app">
+  return (
+    <div className="app">
       <header className="topbar">
         <div className="topbar-title">
           <h1>SpliToshl</h1>
           <p>{status}</p>
         </div>
+
         <div className="topbar-actions">
-  <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>
-    Import CSV / Excel
-  </button>
+          <button type="button" className="btn btn-primary" onClick={() => fileRef.current?.click()}>
+            Import CSV / Excel
+          </button>
 
-  <button className="btn btn-small-icon" onClick={openManualAdd} title="Add expense" aria-label="Add expense">
-    +
-  </button>
+          <button
+            type="button"
+            className="btn btn-small-icon"
+            onClick={openManualAdd}
+            title="Add expense"
+            aria-label="Add expense"
+          >
+            +
+          </button>
 
-  <button className="btn" onClick={() => jsonRef.current?.click()}>
-    Import JSON
-  </button>
+          <button type="button" className="btn" onClick={() => jsonRef.current?.click()}>
+            Import JSON
+          </button>
 
-  <button className="btn" onClick={handleExport}>
-    Export JSON
-  </button>
+          <button type="button" className="btn" onClick={handleExport}>
+            Export JSON
+          </button>
 
-  <button className="btn" onClick={handlePDF}>
-    Download PDF
-  </button>
+          <button type="button" className="btn" onClick={handlePDF}>
+            Download PDF
+          </button>
 
-  <button className="btn btn-quiet" onClick={handleClear}>
-    Clear
-  </button>
+          <button type="button" className="btn btn-quiet" onClick={handleClear}>
+            Clear
+          </button>
 
-  <button
-    className="btn btn-theme btn-theme-quiet"
-    onClick={() => setDarkMode((v) => !v)}
-    aria-label="Toggle theme"
-    title="Toggle theme"
-  >
-    {darkMode ? <SunIcon /> : <MoonIcon />}
-  </button>
+          <button
+            type="button"
+            className="btn btn-theme btn-theme-quiet"
+            onClick={() => setDarkMode((v) => !v)}
+            aria-label="Toggle theme"
+            title="Toggle theme"
+          >
+            {darkMode ? <SunIcon /> : <MoonIcon />}
+          </button>
 
-  <input
-    ref={fileRef}
-    type="file"
-    accept=".csv,.xlsx,.xls,text/csv"
-    hidden
-    onChange={(e) => handleFile(e.target.files?.[0])}
-  />
+          {user ? (
+            <>
+              <span className="muted">Signed in as {user.displayName || user.username}</span>
+              <button type="button" className="btn btn-quiet" onClick={signOutUser}>
+                Sign out
+              </button>
+            </>
+          ) : (
+            <div className="login-inline">
+              <input
+                className="field-input login-input"
+                type="text"
+                placeholder="Name"
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+              />
+              <input
+                className="field-input login-input"
+                type="password"
+                placeholder="Password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={() => signInWithNamePassword(loginName, loginPassword)}
+              >
+                Log in
+              </button>
+            </div>
+          )}
 
-  <input
-    ref={jsonRef}
-    type="file"
-    accept=".json,application/json"
-    hidden
-    onChange={(e) => handleJSON(e.target.files?.[0])}
-  />
-</div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,text/csv"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              await handleFile(file)
+              e.target.value = ''
+            }}
+          />
+
+          <input
+            ref={jsonRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              await handleJSONfile(file)
+              e.target.value = ''
+            }}
+          />
+        </div>
       </header>
 
       <section className="kpis">
         <div className="kpi-card">
-  <div className="label">My Spend</div>
-  <div className="value">{fmtEUR(myTotalSpend)}</div>
-</div>
+          <div className="label">My Spend</div>
+          <div className="value">{fmtEUR(myTotalSpend)}</div>
+        </div>
         <div className="kpi-card">
           <div className="label">Transactions</div>
           <div className="value">{fmtInt(filtered.length)}</div>
@@ -972,248 +1125,248 @@ return (
           <div className="value">{fmtInt(categoryData.length)}</div>
         </div>
         <div className="kpi-card">
-  <div className="label">Joint Spend (full)</div>
-  <div className="value">{fmtEUR(jointTotal)}</div>
-</div>
+          <div className="label">Joint Spend (full)</div>
+          <div className="value">{fmtEUR(jointTotal)}</div>
+        </div>
         <div className="kpi-card accent">
-          <div className="label">Split Balance (owed to you)</div>
+          <div className="label">Split Balance owed to you</div>
           <div className="value">{fmtEUR(splitTotal)}</div>
         </div>
       </section>
 
       <nav className="tabs">
-        {TABS.map(tab => (
+        {TABS.map((tab) => (
           <button
+            type="button"
             key={tab}
-            className={`tab-btn${activeTab === tab ? ' active' : ''}`}
+            className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
             {tab}
-            {tab === 'Splits' && splitTotal > 0 ? ` (${fmtEUR(splitTotal)})` : ''}
+            {tab === 'Splits' && splitTotal > 0 ? ` · ${fmtEUR(splitTotal)}` : ''}
           </button>
         ))}
       </nav>
 
-<div className="toolbar">
-  <input
-    className="search-input"
-    value={query}
-    onChange={(e) => setQuery(e.target.value)}
-    placeholder="Search transactions..."
-  />
+      <div className="toolbar">
+        <input
+          className="search-input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search transactions..."
+        />
 
-  {(activeTab === 'Trends' || activeTab === 'Merchants') && (
-    <select
-      className="field-input"
-      value={overviewCategoryFilter}
-      onChange={(e) => setOverviewCategoryFilter(e.target.value)}
-      title="Filter by category"
-    >
-      <option value="all">All categories</option>
-      {categoryOptions.map((cat) => (
-        <option key={cat} value={cat}>
-          {cat}
-        </option>
-      ))}
-    </select>
-  )}
-</div>
-
-{/* ── OWN OVERVIEW ── */}
-{activeTab === 'Own' &&
-  (!hasData ? (
-    <EmptyState />
-  ) : (
-    <>
-      <div className="grid-2">
-        <div className="panel">
-          <h2>Spending by Category</h2>
-          <ResponsiveContainer width="100%" height={pieHeight}>
-            <PieChart>
-              <Pie
-                data={categoryData}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={90}
-                label={({ name, percent }) =>
-                  `${name} ${fmtNumber(percent * 100, 0)}%`
-                }
-              >
-                {categoryData.map((d) => (
-                  <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                ))}
-              </Pie>
-              <Tooltip {...tt} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="panel">
-          <h2>Monthly Spend</h2>
-          <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={monthData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-              <XAxis dataKey="name" tick={axisTick} />
-              <YAxis tick={axisTick} />
-              <Tooltip {...tt} />
-              <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        {(activeTab === 'Trends' || activeTab === 'Merchants') && (
+          <select
+            className="field-input"
+            value={overviewCategoryFilter}
+            onChange={(e) => setOverviewCategoryFilter(e.target.value)}
+            title="Filter by category"
+          >
+            <option value="all">All categories</option>
+            {categoryOptions.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      <div className="grid-2">
-        <div className="panel">
-          <h2>Own Transactions {sortedTransactions.length}</h2>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th onClick={() => handleSort('date')}>Date</th>
-                  <th onClick={() => handleSort('description')}>Description</th>
-                  <th onClick={() => handleSort('category')}>Category</th>
-                  <th onClick={() => handleSort('amount')}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedTransactions.map((t) => (
-                  <tr key={t.id}>
-                    <td>{t.date}</td>
-                    <td>{t.description}</td>
-                    <td>{t.category}</td>
-                    <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {activeTab === 'Own' &&
+        (!hasData ? (
+          <EmptyState />
+        ) : (
+          <>
+            <div className="grid-2">
+              <div className="panel">
+                <h2>Spending by Category</h2>
+                <ResponsiveContainer width="100%" height={pieHeight}>
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      dataKey="value"
+                      nameKey="name"
+                      outerRadius={90}
+                      label={({ name, percent }) => `${name} ${fmtNumber(percent * 100, 0)}%`}
+                    >
+                      {categoryData.map((d) => (
+                        <Cell key={d.name} fill={getCategoryColor(d.name)} />
+                      ))}
+                    </Pie>
+                    <Tooltip {...tt} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-        <div className="panel">
-          <h2>Own Summary</h2>
-          <div className="table-wrap">
-            <table className="data-table">
-              <tbody>
-                <tr>
-                  <td>Total Own Spend</td>
-                  <td className="amount">{fmtEUR(myTotalSpend)}</td>
-                </tr>
-                <tr>
-                  <td>Transactions</td>
-                  <td className="amount">{fmtEUR(filtered.length)}</td>
-                </tr>
-                <tr>
-                  <td>Categories</td>
-                  <td className="amount">{fmtInt(categoryData.length)}</td>
-                </tr>
-                {categoryData.map((row) => (
-                  <tr key={row.name}>
-                    <td>{row.name}</td>
-                    <td className="amount">{fmtEUR(row.value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </>
-  ))}
+              <div className="panel">
+                <h2>Monthly Spend</h2>
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  <BarChart data={monthData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
+                    <XAxis dataKey="name" tick={axisTick} />
+                    <YAxis tick={axisTick} />
+                    <Tooltip {...tt} />
+                    <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-      {/* ── JOINT OVERVIEW ── */}
+            <div className="grid-2">
+              <div className="panel">
+                <h2>Own Transactions ({sortedTransactions.length})</h2>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th onClick={() => handleSort('date')}>Date</th>
+                        <th onClick={() => handleSort('description')}>Description</th>
+                        <th onClick={() => handleSort('category')}>Category</th>
+                        <th onClick={() => handleSort('amount')}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedTransactions.map((t) => (
+                        <tr key={t.id}>
+                          <td>{t.date}</td>
+                          <td>{t.description}</td>
+                          <td>{t.category}</td>
+                          <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="panel">
+                <h2>Own Summary</h2>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <tbody>
+                      <tr>
+                        <td>Total Own Spend</td>
+                        <td className="amount">{fmtEUR(myTotalSpend)}</td>
+                      </tr>
+                      <tr>
+                        <td>Transactions</td>
+                        <td className="amount">{fmtInt(filtered.length)}</td>
+                      </tr>
+                      <tr>
+                        <td>Categories</td>
+                        <td className="amount">{fmtInt(categoryData.length)}</td>
+                      </tr>
+                      {categoryData.map((row) => (
+                        <tr key={row.name}>
+                          <td>{row.name}</td>
+                          <td className="amount">{fmtEUR(row.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </>
+        ))}
+
       {activeTab === 'Joint' &&
         (!hasData ? (
           <EmptyState message="Import a joint account statement to see joint costs." />
         ) : jointTransactions.length === 0 ? (
           <EmptyState message="No joint transactions detected yet." />
         ) : (
-          <div className="grid-2">
-            <div className="panel">
-              <h2>Joint Spending by Category</h2>
-              <ResponsiveContainer width="100%" height={pieHeight}>
-                <PieChart>
-                  <Pie
-                    data={jointCategoryData}
-                    dataKey="value"
-                    nameKey="name"
-                    outerRadius={90}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {jointCategoryData.map(d => (
-                      <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                    ))}
-                  </Pie>
-                  <Tooltip {...tt} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+          <>
+            <div className="grid-2">
+              <div className="panel">
+                <h2>Joint Spending by Category</h2>
+                <ResponsiveContainer width="100%" height={pieHeight}>
+                  <PieChart>
+                    <Pie
+                      data={jointCategoryData}
+                      dataKey="value"
+                      nameKey="name"
+                      outerRadius={90}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {jointCategoryData.map((d) => (
+                        <Cell key={d.name} fill={getCategoryColor(d.name)} />
+                      ))}
+                    </Pie>
+                    <Tooltip {...tt} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-            <div className="panel">
-              <h2>Joint Monthly Spend</h2>
-              <ResponsiveContainer width="100%" height={chartHeight}>
-                <BarChart data={jointMonthData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-                  <XAxis dataKey="name" tick={axisTick} />
-                  <YAxis tick={axisTick} />
-                  <Tooltip {...tt} />
-                  <Bar dataKey="value" fill="#264653" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="panel">
-              <h2>Joint Transactions {sortedJointTransactions.length}</h2>
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th onClick={() => handleJointSort('date')}>Date</th>
-                      <th onClick={() => handleJointSort('description')}>Description</th>
-                      <th onClick={() => handleJointSort('category')}>Category</th>
-                      <th onClick={() => handleJointSort('amount')}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedJointTransactions.map(t => (
-                      <tr key={t.id}>
-                        <td>{t.date}</td>
-                        <td>{t.description}</td>
-                        <td>{t.category}</td>
-                        <td className="amount">{fmtEUR(t.jointAmount || 0)}</td>
-                      </tr>
-                     ))}
-                  </tbody>
-                </table>
+              <div className="panel">
+                <h2>Joint Monthly Spend</h2>
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  <BarChart data={jointMonthData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
+                    <XAxis dataKey="name" tick={axisTick} />
+                    <YAxis tick={axisTick} />
+                    <Tooltip {...tt} />
+                    <Bar dataKey="value" fill="#264653" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="panel">
-  <h2>Joint Summary</h2>
-  <div className="table-wrap">
-    <table className="data-table">
-      <tbody>
-        <tr>
-          <td>Total Joint Spend</td>
-          <td className="amount">{fmtEUR(jointTotal)}</td>
-        </tr>
-        <tr>
-          <td>Transactions</td>
-          <td className="amount">{fmtEUR(filteredJointTransactions.length)}</td>
-        </tr>
-        {jointCategoryData.map((row) => (
-          <tr key={row.name}>
-            <td>{row.name}</td>
-            <td className="amount">{fmtEUR(row.value)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-</div>
+            <div className="grid-2">
+              <div className="panel">
+                <h2>Joint Transactions ({sortedJointTransactions.length})</h2>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th onClick={() => handleJointSort('date')}>Date</th>
+                        <th onClick={() => handleJointSort('description')}>Description</th>
+                        <th onClick={() => handleJointSort('category')}>Category</th>
+                        <th onClick={() => handleJointSort('amount')}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedJointTransactions.map((t) => (
+                        <tr key={t.id}>
+                          <td>{t.date}</td>
+                          <td>{t.description}</td>
+                          <td>{t.category}</td>
+                          <td className="amount">{fmtEUR(t.jointAmount || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="panel">
+                <h2>Joint Summary</h2>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <tbody>
+                      <tr>
+                        <td>Total Joint Spend</td>
+                        <td className="amount">{fmtEUR(jointTotal)}</td>
+                      </tr>
+                      <tr>
+                        <td>Transactions</td>
+                        <td className="amount">{fmtInt(filteredJointTransactions.length)}</td>
+                      </tr>
+                      {jointCategoryData.map((row) => (
+                        <tr key={row.name}>
+                          <td>{row.name}</td>
+                          <td className="amount">{fmtEUR(row.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </>
         ))}
 
-      {/* ── TRENDS ── */}
       {activeTab === 'Trends' &&
         (!hasData ? (
           <EmptyState />
@@ -1223,7 +1376,7 @@ return (
             <ResponsiveContainer width="100%" height={merchantChartHeight}>
               <BarChart data={merchantData} layout="vertical" margin={{ left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-                <XAxis type="number" tick={axisTick} tickFormatter={v => fmtEUR(v)} />
+                <XAxis type="number" tick={axisTick} tickFormatter={(v) => fmtEUR(v)} />
                 <YAxis type="category" dataKey="name" width={180} tick={axisTick} />
                 <Tooltip {...tt} />
                 <Bar dataKey="value" fill="#264653" radius={[0, 4, 4, 0]} />
@@ -1232,7 +1385,6 @@ return (
           </div>
         ))}
 
-      {/* ── FORECAST ── */}
       {activeTab === 'Forecast' &&
         (!hasData ? (
           <EmptyState />
@@ -1241,38 +1393,20 @@ return (
             <div className="grid-2">
               <div className="panel">
                 <h2>Spend Forecast</h2>
-                <p className="subtle-note">
-                  Average of recent monthly spend: {fmtEUR(forecast.avg)}
-                </p>
+                <p className="subtle-note">Average of recent monthly spend: {fmtEUR(forecast.avg)}</p>
                 <ResponsiveContainer width="100%" height={chartHeight}>
                   <LineChart data={forecast.series}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
                     <XAxis dataKey="month" tick={axisTick} />
-                    <YAxis tick={axisTick} tickFormatter={v => fmtEUR(v)} width={88} />
+                    <YAxis tick={axisTick} tickFormatter={(v) => fmtEUR(v)} width={88} />
                     <Tooltip {...tt} />
                     <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="actual"
-                      stroke="#01696f"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      name="Actual"
-                      connectNulls={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="projected"
-                      stroke="#f4a261"
-                      strokeWidth={2}
-                      strokeDasharray="6 4"
-                      dot={{ r: 4 }}
-                      name="Projected"
-                      connectNulls={false}
-                    />
+                    <Line type="monotone" dataKey="actual" stroke="#01696f" strokeWidth={2} dot={{ r: 4 }} name="Actual" connectNulls={false} />
+                    <Line type="monotone" dataKey="projected" stroke="#f4a261" strokeWidth={2} strokeDasharray="6 4" dot={{ r: 4 }} name="Projected" connectNulls={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+
               <div className="panel">
                 <h2>Forecast Details</h2>
                 <div className="table-wrap">
@@ -1285,15 +1419,11 @@ return (
                       </tr>
                     </thead>
                     <tbody>
-                      {forecast.series.map(row => (
+                      {forecast.series.map((row) => (
                         <tr key={row.month}>
                           <td>{row.month}</td>
-                          <td className="amount">
-                            {row.actual != null ? fmtEUR(row.actual) : '—'}
-                          </td>
-                          <td className="amount">
-                            {row.projected != null ? fmtEUR(row.projected) : '—'}
-                          </td>
+                          <td className="amount">{row.actual != null ? fmtEUR(row.actual) : '—'}</td>
+                          <td className="amount">{row.projected != null ? fmtEUR(row.projected) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1315,7 +1445,7 @@ return (
                       </tr>
                     </thead>
                     <tbody>
-                      {forecastByCategory.map(row => (
+                      {forecastByCategory.map((row) => (
                         <tr key={row.category}>
                           <td>{row.category}</td>
                           <td className="amount">{fmtEUR(row.avgPerMonth)}</td>
@@ -1325,10 +1455,10 @@ return (
                     </tbody>
                   </table>
                 </div>
+
                 {mostExpensiveCategory && (
                   <p className="subtle-note" style={{ marginTop: '1rem' }}>
-                    Most expensive category in the recent period is{' '}
-                    <strong>{mostExpensiveCategory.category}</strong> with an average of{' '}
+                    Most expensive category in the recent period is <strong>{mostExpensiveCategory.category}</strong> with an average of{' '}
                     <strong>{fmtEUR(mostExpensiveCategory.avgPerMonth)}</strong> per month.
                   </p>
                 )}
@@ -1337,7 +1467,6 @@ return (
           </>
         ))}
 
-      {/* ── MERCHANTS ── */}
       {activeTab === 'Merchants' &&
         (!hasData ? (
           <EmptyState />
@@ -1367,141 +1496,104 @@ return (
           </div>
         ))}
 
-      {/* ── SUBSCRIPTIONS ── */}
-{activeTab === 'Subscriptions' &&
-  (!hasData ? (
-    <EmptyState />
-  ) : subscriptions.length === 0 ? (
-    <EmptyState message="No subscriptions detected." />
-  ) : (
-    <div className="panel">
-      <h2>Subscriptions</h2>
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Subscription</th>
-              <th>Total spent</th>
-              <th>Last charge</th>
-              <th>Last charge date</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-  {subscriptions.map(t => {
-    const isEditing = editingId === t.id
-
-    return (
-      <tr key={t.id} className={isEditing ? 'editing-row' : ''}>
-        {/* Subscription name */}
-        <td>
-          {isEditing ? (
-            <input
-              className="field-input"
-              type="text"
-              value={editDraft.description}
-              placeholder="Subscription"
-              onChange={e =>
-                setEditDraft(p => ({ ...p, description: e.target.value }))
-              }
-            />
-          ) : (
-            t.description || <span className="muted">—</span>
-          )}
-        </td>
-
-        {/* Total spent historically */}
-        <td className="amount">
-          {fmtEUR(t.totalAmount || 0)}
-        </td>
-
-        {/* Last charge amount */}
-        <td className="amount">
-          {isEditing ? (
-            <input
-              className="field-input amount-input"
-              type="number"
-              min="0"
-              step="0.01"
-              value={editDraft.amount}
-              onChange={e =>
-                setEditDraft(p => ({ ...p, amount: e.target.value }))
-              }
-            />
-          ) : (
-            fmtEUR(t.lastAmount ?? t.amount ?? 0)
-          )}
-        </td>
-
-        {/* Last charge date */}
-        <td>
-          {isEditing ? (
-            <input
-              className="field-input"
-              type="date"
-              value={editDraft.date}
-              onChange={e =>
-                setEditDraft(p => ({ ...p, date: e.target.value }))
-              }
-            />
-          ) : (
-            t.date
-          )}
-        </td>
-
-        {/* Status */}
-        <td>
-          {t.subscriptionStatus === 'active' ? (
-            <span className="muted">Active</span>
-          ) : (
-            <span className="muted">Over currently</span>
-          )}
-        </td>
-
-        {/* Actions */}
-        <td>
-          <div className="row-actions">
-            {isEditing ? (
-              <>
-                <button
-                  className="btn btn-small btn-primary"
-                  onClick={() => saveEdit(t.id)}
-                >
-                  Save
-                </button>
-                <button className="btn btn-small" onClick={cancelEdit}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className="btn btn-small"
-                  onClick={() => startEdit(t)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="btn btn-small btn-danger"
-                  onClick={() => deleteTransaction(t.id)}
-                >
-                  Delete
-                </button>
-              </>
-            )}
+      {activeTab === 'Subscriptions' &&
+        (!hasData ? (
+          <EmptyState />
+        ) : subscriptions.length === 0 ? (
+          <EmptyState message="No subscriptions detected." />
+        ) : (
+          <div className="panel">
+            <h2>Subscriptions</h2>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Subscription</th>
+                    <th>Total spent</th>
+                    <th>Last charge</th>
+                    <th>Last charge date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subscriptions.map((t) => {
+                    const isEditing = editingId === t.id
+                    return (
+                      <tr key={t.id} className={isEditing ? 'editing-row' : ''}>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="field-input"
+                              type="text"
+                              value={editDraft.description}
+                              placeholder="Subscription"
+                              onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                            />
+                          ) : (
+                            t.description || '—'
+                          )}
+                        </td>
+                        <td className="amount">{fmtEUR(t.totalAmount || 0)}</td>
+                        <td className="amount">
+                          {isEditing ? (
+                            <input
+                              className="field-input amount-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editDraft.amount}
+                              onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))}
+                            />
+                          ) : (
+                            fmtEUR(t.lastAmount ?? t.amount ?? 0)
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="field-input"
+                              type="date"
+                              value={editDraft.date}
+                              onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
+                            />
+                          ) : (
+                            t.date
+                          )}
+                        </td>
+                        <td>{t.subscriptionStatus === 'active' ? <span className="muted">Active</span> : <span className="muted">Over currently</span>}</td>
+                        <td>
+                          <div className="row-actions">
+                            {isEditing ? (
+                              <>
+                                <button type="button" className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
+                                  Save
+                                </button>
+                                <button type="button" className="btn btn-small" onClick={cancelEdit}>
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button type="button" className="btn btn-small" onClick={() => startEdit(t)}>
+                                  Edit
+                                </button>
+                                <button type="button" className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </td>
-      </tr>
-    )
-  })}
-</tbody>
-        </table>
-      </div>
-    </div>
-  ))}
+        ))}
 
-      {/* ── TRANSACTIONS ── */}
       {activeTab === 'Transactions' &&
         (!hasData ? (
           <EmptyState />
@@ -1512,220 +1604,205 @@ return (
               <table className="data-table">
                 <thead>
                   <tr>
-                   <th onClick={() => handleSort('date')}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <span>Date</span>
-                      <input
-                        className="field-input"
-                        type="month"
-                        value={dateFilter}
-                        onChange={(e) => setDateFilter(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </th>
-
-                  <th onClick={() => handleSort('description')}>Description</th>
-
-                  <th onClick={() => handleSort('category')}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      <span>Category</span>
-                      <select
-                        className="field-input"
-                        value={transactionCategoryFilter}
-                        onChange={(e) => setTransactionCategoryFilter(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
+                    <th onClick={() => handleSort('date')}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <span>Date</span>
+                        <input
+                          className="field-input"
+                          type="month"
+                          value={dateFilter}
+                          onChange={(e) => setDateFilter(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('description')}>Description</th>
+                    <th onClick={() => handleSort('category')}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <span>Category</span>
+                        <select
+                          className="field-input"
+                          value={transactionCategoryFilter}
+                          onChange={(e) => setTransactionCategoryFilter(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="all">All categories</option>
+                          {categoryOptions.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort('amount')}>Amount</th>
+                    <th>Split</th>
+                    <th>Joint?</th>
+                    <th>
+                      <button
+                        type="button"
+                        className="btn btn-small"
+                        onClick={() => {
+                          setDateFilter('')
+                          setTransactionCategoryFilter('all')
+                        }}
                       >
-                        <option value="all">All categories</option>
-                        {categoryOptions.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </th>
-
-                  <th onClick={() => handleSort('amount')}>Amount</th>
-                  <th>Split</th>
-                  <th>Joint?</th>
-                  <th>
-                    <button
-                      className="btn btn-small"
-                      onClick={() => {
-                        setDateFilter('')
-                        setTransactionCategoryFilter('all')
-                      }}
-                    >
-                      Clear
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-
+                        Clear
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {sortedTransactions.map(t => {
+                  {sortedTransactions.map((t) => {
                     const isEditing = editingId === t.id
                     return (
                       <tr
                         key={t.id}
-                          className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''} ${isEditing ? 'editing-row' : ''}`.trim()}
-                          >
-                            <td>
-                              {isEditing ? (
-                              <input
+                        className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''} ${isEditing ? 'editing-row' : ''}`.trim()}
+                      >
+                        <td>
+                          {isEditing ? (
+                            <input
                               className="field-input"
                               type="date"
                               value={editDraft.date}
-                              onChange={e => setEditDraft(p => ({ ...p, date: e.target.value }))}
-                              />
-                                ) : (
-                                t.date
-                                )}
-                            </td>
-
-                          <td>
-    {isEditing ? (
-      <input
-        className="field-input"
-        type="text"
-        value={editDraft.description}
-        placeholder="Description"
-        onChange={e => setEditDraft(p => ({ ...p, description: e.target.value }))}
-      />
-    ) : (
-      <span className="muted">{t.description}</span>
-    )}
-  </td>
-
-  <td>
-  {isEditing ? (
-    <select
-      className="field-input"
-      value={editDraft.category}
-      onChange={(e) =>
-        setEditDraft((p) => ({ ...p, category: e.target.value }))
-      }
-    >
-      {categoryOptions.map((cat) => (
-        <option key={cat} value={cat}>
-          {cat}
-        </option>
-      ))}
-    </select>
-  ) : (
-    t.category
-  )}
-</td>
-
-  <td className="amount">
-    {isEditing ? (
-      <input
-        className="field-input amount-input"
-        type="number"
-        min="0"
-        step="0.01"
-        value={editDraft.amount}
-        onChange={e => setEditDraft(p => ({ ...p, amount: e.target.value }))}
-      />
-    ) : (
-      fmtEUR(t.amount || 0)
-    )}
-  </td>
-
-  <td>
-    {isEditing ? (
-      <select
-        className="field-input"
-        value={editDraft.split ? 'yes' : 'no'}
-        onChange={e => setEditDraft(p => ({ ...p, split: e.target.value === 'yes' }))}
-      >
-        <option value="no">No</option>
-        <option value="yes">Yes</option>
-      </select>
-    ) : (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-  <button
-    className={`btn btn-split ${(t.split || t.splitPaid) ? 'yes' : ''} ${t.splitPaid ? 'disabled' : ''}`}
-    onClick={() => toggleSplit(t.id)}
-    disabled={t.splitPaid}
-    title={t.splitPaid ? 'Already split and paid in the past' : ''}
-  >
-    {(t.split || t.splitPaid) ? 'Yes' : 'No'}
-  </button>
-
-  {t.splitPaid && (
-    <span
-      style={{
-        fontSize: '0.72rem',
-        padding: '0.2rem 0.45rem',
-        borderRadius: '999px',
-        background: 'var(--color-warning-highlight)',
-        color: 'var(--color-warning)',
-        whiteSpace: 'nowrap',
-        fontWeight: 600,
-      }}
-    >
-      Already Paid
-    </span>
-  )}
-</div>
-    )}
-  </td>
-
-  <td>
-  {isEditing ? (
-    <select
-      className="field-input"
-      value={(t.account === 'joint' || editDraft.joint) ? 'yes' : 'no'}
-      onChange={(e) =>
-        setEditDraft((p) => ({
-          ...p,
-          joint: e.target.value === 'yes',
-        }))
-      }
-      disabled={t.account === 'joint'}
-      title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
-    >
-      <option value="no">No</option>
-      <option value="yes">Yes</option>
-    </select>
-  ) : (
-    <button
-      className={`btn btn-split ${(t.joint || t.account === 'joint') ? 'yes' : ''}`}
-      onClick={() => toggleJoint(t.id)}
-      disabled={t.account === 'joint'}
-      title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
-    >
-      {(t.joint || t.account === 'joint') ? 'Yes' : 'No'}
-    </button>
-  )}
-</td>
-
-  <td>
-    <div className="row-actions">
-      {isEditing ? (
-        <>
-          <button className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
-            Save
-          </button>
-          <button className="btn btn-small" onClick={cancelEdit}>
-            Cancel
-          </button>
-        </>
-      ) : (
-        <>
-          <button className="btn btn-small" onClick={() => startEdit(t)}>
-            Edit
-          </button>
-          <button className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
-            Delete
-          </button>
-        </>
-      )}
-    </div>
-  </td>
-</tr>
+                              onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
+                            />
+                          ) : (
+                            t.date
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              className="field-input"
+                              type="text"
+                              value={editDraft.description}
+                              placeholder="Description"
+                              onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                            />
+                          ) : (
+                            <span className="muted">{t.description}</span>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <select
+                              className="field-input"
+                              value={editDraft.category}
+                              onChange={(e) => setEditDraft((p) => ({ ...p, category: e.target.value }))}
+                            >
+                              {categoryOptions.map((cat) => (
+                                <option key={cat} value={cat}>
+                                  {cat}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            t.category
+                          )}
+                        </td>
+                        <td className="amount">
+                          {isEditing ? (
+                            <input
+                              className="field-input amount-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editDraft.amount}
+                              onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))}
+                            />
+                          ) : (
+                            fmtEUR(t.amount || 0)
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <select
+                              className="field-input"
+                              value={editDraft.split ? 'yes' : 'no'}
+                              onChange={(e) => setEditDraft((p) => ({ ...p, split: e.target.value === 'yes' }))}
+                            >
+                              <option value="no">No</option>
+                              <option value="yes">Yes</option>
+                            </select>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <button
+                                type="button"
+                                className={`btn btn-split ${t.split || t.splitPaid ? 'yes' : ''}`}
+                                onClick={() => toggleSplit(t.id)}
+                                disabled={t.splitPaid}
+                                title={t.splitPaid ? 'Already split and paid in the past' : ''}
+                              >
+                                {t.split || t.splitPaid ? 'Yes' : 'No'}
+                              </button>
+                              {t.splitPaid && (
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '0.2rem 0.45rem',
+                                    borderRadius: '999px',
+                                    background: 'var(--color-warning-highlight)',
+                                    color: 'var(--color-warning)',
+                                    whiteSpace: 'nowrap',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  Already Paid
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <select
+                              className="field-input"
+                              value={t.account === 'joint' || editDraft.joint ? 'yes' : 'no'}
+                              onChange={(e) => setEditDraft((p) => ({ ...p, joint: e.target.value === 'yes' }))}
+                              disabled={t.account === 'joint'}
+                              title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
+                            >
+                              <option value="no">No</option>
+                              <option value="yes">Yes</option>
+                            </select>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
+                              onClick={() => toggleJoint(t.id)}
+                              disabled={t.account === 'joint'}
+                              title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
+                            >
+                              {t.joint || t.account === 'joint' ? 'Yes' : 'No'}
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            {isEditing ? (
+                              <>
+                                <button type="button" className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
+                                  Save
+                                </button>
+                                <button type="button" className="btn btn-small" onClick={cancelEdit}>
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button type="button" className="btn btn-small" onClick={() => startEdit(t)}>
+                                  Edit
+                                </button>
+                                <button type="button" className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )
                   })}
                 </tbody>
@@ -1734,28 +1811,19 @@ return (
           </div>
         ))}
 
-      {/* ── SPLITS ── */}
       {activeTab === 'Splits' &&
         (splitRows.length === 0 ? (
-          <EmptyState message='Go to Transactions and set Split to "Yes" on any shared expense.' />
+          <EmptyState message="Go to Transactions and set Split to Yes on any shared expense." />
         ) : (
           <>
             <div className="panel">
-              <div
-  style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '1rem',
-    flexWrap: 'wrap',
-  }}
->
-  <h2>Monthly Split Balance</h2>
-  <button className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>Paid</button>
-</div>
-              <p className="subtle-note">
-                50% of each split transaction is counted as owed to you.
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <h2>Monthly Split Balance</h2>
+                <button type="button" className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>
+                  Paid
+                </button>
+              </div>
+              <p className="subtle-note">50% of each split transaction is counted as owed to you.</p>
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
@@ -1765,7 +1833,7 @@ return (
                     </tr>
                   </thead>
                   <tbody>
-                    {splitRows.map(r => (
+                    {splitRows.map((r) => (
                       <tr key={r.month}>
                         <td>{r.month}</td>
                         <td className="amount">{fmtEUR(r.owed)}</td>
@@ -1782,7 +1850,7 @@ return (
 
             {splitBreakdownByMonthCategory.length > 0 && (
               <div className="panel">
-                <h2>Split Debt by Month & Category</h2>
+                <h2>Split Debt by Month Category</h2>
                 <div className="table-wrap">
                   <table className="data-table">
                     <thead>
@@ -1793,7 +1861,7 @@ return (
                       </tr>
                     </thead>
                     <tbody>
-                      {splitBreakdownByMonthCategory.map(row => (
+                      {splitBreakdownByMonthCategory.map((row) => (
                         <tr key={`${row.month}-${row.category}`}>
                           <td>{row.month}</td>
                           <td>{row.category}</td>
@@ -1806,111 +1874,111 @@ return (
               </div>
             )}
           </>
-              ))}
+        ))}
 
-{showAddModal && (
-  <div className="modal-backdrop" onClick={closeManualAdd}>
-    <div className="modal modal-form" onClick={(e) => e.stopPropagation()}>
-      <h3>Add expense</h3>
-      <p>Manually add one expense to your transactions.</p>
+      {showAddModal && (
+        <div className="modal-backdrop" onClick={closeManualAdd}>
+          <div className="modal modal-form" onClick={(e) => e.stopPropagation()}>
+            <h3>Add expense</h3>
+            <p>Manually add one expense to your transactions.</p>
 
-      <div className="manual-form">
-        <label className="field-group">
-          <span>Date</span>
-          <input
-            className="field-input"
-            type="date"
-            value={manualDraft.date}
-            onChange={(e) => setManualDraft((p) => ({ ...p, date: e.target.value }))}
-          />
-        </label>
+            <div className="manual-form">
+              <label className="field-group">
+                <span>Date</span>
+                <input
+                  className="field-input"
+                  type="date"
+                  value={manualDraft.date}
+                  onChange={(e) => setManualDraft((p) => ({ ...p, date: e.target.value }))}
+                />
+              </label>
 
-        <label className="field-group">
-          <span>Description</span>
-          <input
-            className="field-input"
-            type="text"
-            value={manualDraft.description}
-            placeholder="Expense description"
-            onChange={(e) => setManualDraft((p) => ({ ...p, description: e.target.value }))}
-          />
-        </label>
+              <label className="field-group">
+                <span>Description</span>
+                <input
+                  className="field-input"
+                  type="text"
+                  value={manualDraft.description}
+                  placeholder="Expense description"
+                  onChange={(e) => setManualDraft((p) => ({ ...p, description: e.target.value }))}
+                />
+              </label>
 
-        <label className="field-group">
-          <span>Category</span>
-          <select
-            className="field-input"
-            value={manualDraft.category}
-            onChange={(e) => setManualDraft((p) => ({ ...p, category: e.target.value }))}
-          >
-            {categoryOptions.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </label>
+              <label className="field-group">
+                <span>Category</span>
+                <select
+                  className="field-input"
+                  value={manualDraft.category}
+                  onChange={(e) => setManualDraft((p) => ({ ...p, category: e.target.value }))}
+                >
+                  {categoryOptions.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-        <label className="field-group">
-          <span>Amount</span>
-          <input
-            className="field-input amount-input"
-            type="number"
-            min="0"
-            step="0.01"
-            value={manualDraft.amount}
-            onChange={(e) => setManualDraft((p) => ({ ...p, amount: e.target.value }))}
-          />
-        </label>
+              <label className="field-group">
+                <span>Amount</span>
+                <input
+                  className="field-input amount-input"
+                  type="text"
+                  inputMode="decimal"
+                  value={manualDraft.amount}
+                  placeholder="0,00"
+                  onChange={(e) => setManualDraft((p) => ({ ...p, amount: e.target.value }))}
+                />
+              </label>
 
-        <label className="field-check">
-          <input
-            type="checkbox"
-            checked={manualDraft.split}
-            onChange={(e) => setManualDraft((p) => ({ ...p, split: e.target.checked }))}
-          />
-          <span>Split</span>
-        </label>
+              <label className="field-check">
+                <input
+                  type="checkbox"
+                  checked={manualDraft.split}
+                  onChange={(e) => setManualDraft((p) => ({ ...p, split: e.target.checked }))}
+                />
+                <span>Split</span>
+              </label>
 
-        <label className="field-check">
-          <input
-            type="checkbox"
-            checked={manualDraft.joint}
-            onChange={(e) => setManualDraft((p) => ({ ...p, joint: e.target.checked }))}
-          />
-          <span>Show in Joint tab too</span>
-        </label>
-      </div>
+              <label className="field-check">
+                <input
+                  type="checkbox"
+                  checked={manualDraft.joint}
+                  onChange={(e) => setManualDraft((p) => ({ ...p, joint: e.target.checked }))}
+                />
+                <span>Show in Joint tab too</span>
+              </label>
+            </div>
 
-      <div className="modal-actions">
-        <button className="btn btn-primary" onClick={saveManualExpense}>
-          Add expense
-        </button>
-        <button className="btn" onClick={closeManualAdd}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-primary" onClick={saveManualExpense}>
+                Add expense
+              </button>
+              <button type="button" className="btn" onClick={closeManualAdd}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Import type modal */}
       {pendingImport && (
         <div className="modal-backdrop">
           <div className="modal">
             <h3>Which account is this statement from?</h3>
             <p>
-              Choose <strong>Own</strong> for your personal account, or{' '}
-              <strong>Joint</strong> for your shared account with your partner.
+              Choose <strong>Own</strong> for your personal account, or <strong>Joint</strong> for your shared account with your partner.
             </p>
             <div className="modal-actions">
               <button
+                type="button"
                 className="btn btn-modal"
                 onClick={() => finishImport(pendingImport.rows, pendingImport.label, 'personal')}
               >
                 Own
               </button>
               <button
+                type="button"
                 className="btn btn-modal"
                 onClick={() => finishImport(pendingImport.rows, pendingImport.label, 'joint')}
               >
