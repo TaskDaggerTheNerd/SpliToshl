@@ -554,9 +554,10 @@ export default function App() {
     let keepLoading = true
 
     while (keepLoading) {
-      const { data, error } = await supabase
+   const { data, error } = await supabase
   .from('transactions')
   .select('*')
+  .eq('userid', currentUser.id)
   .order('date', { ascending: false })
   .range(from, from + pageSize - 1)
 
@@ -583,7 +584,7 @@ export default function App() {
   amount: Number(t.amount || 0),
   category: t.category || 'Other',
   split: Boolean(t.split),
-  splitPaid: false,
+  splitPaid: Boolean(t.splitpaid),
   joint: Boolean(t.joint),
   jointMode: null,
   account: t.account || 'personal',
@@ -594,15 +595,17 @@ export default function App() {
     setStatus(`Loaded ${normalized.length} cloud transactions for ${currentUser.displayName || currentUser.username}.`)
   }
 
-async function addTransactionToCloud(tx) {
+async function addTransactionToCloud(tx, currentUser) {
   const { error } = await supabase.from('transactions').insert({
     id: tx.id,
+    userid: currentUser.id,
     date: tx.date,
     description: tx.description,
     merchant: tx.merchant,
     amount: tx.amount,
     category: tx.category,
     split: tx.split,
+    splitpaid: tx.splitPaid,
     joint: tx.joint,
     account: tx.account,
   })
@@ -610,20 +613,12 @@ async function addTransactionToCloud(tx) {
   return error
 }
 
-async function updateTransactionInCloud(tx) {
+async function deleteTransactionFromCloud(id, currentUser) {
   const { error } = await supabase
     .from('transactions')
-    .update({
-      date: tx.date,
-      description: tx.description,
-      merchant: tx.merchant,
-      amount: tx.amount,
-      category: tx.category,
-      split: tx.split,
-      joint: tx.joint,
-      account: tx.account,
-    })
-    .eq('id', tx.id)
+    .delete()
+    .eq('id', id)
+    .eq('userid', currentUser.id)
 
   return error
 }
@@ -672,12 +667,14 @@ async function deleteTransactionFromCloud(id) {
     if (user) {
  const payload = enriched.map((t) => ({
   id: t.id,
+  userid: user.id,
   date: t.date,
   description: t.description,
   merchant: t.merchant || t.description,
   amount: Number(t.amount || 0),
   category: t.category || 'Other',
   split: Boolean(t.split),
+  splitpaid: Boolean(t.splitPaid),
   joint: Boolean(t.joint),
   account: t.account || 'personal',
 }))
@@ -821,7 +818,7 @@ async function deleteTransactionFromCloud(id) {
     }
 
     if (user) {
-      const error = await addTransactionToCloud(newTransaction)
+      const error = await addTransactionToCloud(newTransaction, user)
       if (error) {
         setStatus(`Cloud save failed: ${error.message}`)
         return
@@ -835,21 +832,42 @@ async function deleteTransactionFromCloud(id) {
     setActiveTab('Transactions')
   }
 
-  function markAllSplitsPaid() {
-    let changed = 0
-    setTransactions((prev) =>
-      prev.map((t) => {
-        if (t.split) {
-          changed += 1
-          return { ...t, split: false, splitPaid: true }
-        }
-        return t
-      })
-    )
+  async function markAllSplitsPaid() {
+  const openSplitIds = transactions
+    .filter((t) => t.split)
+    .map((t) => t.id)
 
-    if (changed === 0) setStatus('No split transactions to mark as paid.')
-    else setStatus(`Marked ${changed} split transactions as paid.`)
+  if (openSplitIds.length === 0) {
+    setStatus('No split transactions to mark as paid.')
+    return
   }
+
+  if (user) {
+    const { error } = await supabase
+      .from('transactions')
+      .update({ split: false, splitpaid: true })
+      .in('id', openSplitIds)
+      .eq('userid', user.id)
+
+    if (error) {
+      setStatus(`Cloud save failed: ${error.message}`)
+      return
+    }
+  }
+
+  let changed = 0
+  setTransactions((prev) =>
+    prev.map((t) => {
+      if (t.split) {
+        changed += 1
+        return { ...t, split: false, splitPaid: true }
+      }
+      return t
+    })
+  )
+
+  setStatus(`Marked ${changed} split transactions as paid.`)
+}
 
   function toggleSplit(id) {
     const tx = transactions.find((t) => t.id === id)
