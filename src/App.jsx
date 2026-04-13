@@ -596,19 +596,42 @@ export default function App() {
   }
 
 async function addTransactionToCloud(tx, currentUser) {
-  const { error } = await supabase.from('transactions').insert({
-    id: tx.id,
-    userid: currentUser.id,
-    date: tx.date,
-    description: tx.description,
-    merchant: tx.merchant,
-    amount: tx.amount,
-    category: tx.category,
-    split: tx.split,
-    splitpaid: tx.splitPaid,
-    joint: tx.joint,
-    account: tx.account,
-  })
+  const { error } = await supabase.from('transactions').upsert(
+    {
+      id: tx.id,
+      userid: currentUser.id,
+      date: tx.date,
+      description: tx.description,
+      merchant: tx.merchant,
+      amount: tx.amount,
+      category: tx.category,
+      split: tx.split,
+      splitpaid: tx.splitPaid,
+      joint: tx.joint,
+      account: tx.account,
+    },
+    { onConflict: 'userid,id' }
+  )
+
+  return error
+}
+
+async function updateTransactionInCloud(tx, currentUser) {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      date: tx.date,
+      description: tx.description,
+      merchant: tx.merchant,
+      amount: tx.amount,
+      category: tx.category,
+      split: tx.split,
+      splitpaid: tx.splitPaid,
+      joint: tx.joint,
+      account: tx.account,
+    })
+    .eq('userid', currentUser.id)
+    .eq('id', tx.id)
 
   return error
 }
@@ -617,16 +640,7 @@ async function deleteTransactionFromCloud(id, currentUser) {
   const { error } = await supabase
     .from('transactions')
     .delete()
-    .eq('id', id)
     .eq('userid', currentUser.id)
-
-  return error
-}
-
-async function deleteTransactionFromCloud(id) {
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
     .eq('id', id)
 
   return error
@@ -659,68 +673,70 @@ async function updateTransactionInCloud(tx, currentUser) {
   }
 
   async function finishImport(rows, label, accountType) {
-    const isJoint = accountType === 'joint'
-    const normalized = dedup(normalizeTransactions(rows))
+  const isJoint = accountType === 'joint'
+  const normalized = dedup(normalizeTransactions(rows))
 
-    if (normalized.length === 0) {
-      setStatus('No transactions found. Check file columns.')
-      setPendingImport(null)
-      return
-    }
+  if (normalized.length === 0) {
+    setStatus('No transactions found. Check file columns.')
+    setPendingImport(null)
+    return
+  }
 
-    const enriched = normalized.map((t) => ({
-      ...t,
-      account: t.account || (isJoint ? 'joint' : 'personal'),
-      split: t.account ? Boolean(t.split) : false,
-      joint: t.account === 'joint' ? true : isJoint ? true : Boolean(t.joint),
-      jointMode: t.account === 'joint' ? 'full' : isJoint ? 'full' : t.joint ? t.jointMode || 'full' : null,
+  const enriched = normalized.map((t) => ({
+    ...t,
+    account: t.account || (isJoint ? 'joint' : 'personal'),
+    split: t.account ? Boolean(t.split) : false,
+    joint: t.account === 'joint' ? true : isJoint ? true : Boolean(t.joint),
+    jointMode: t.account === 'joint' ? 'full' : isJoint ? 'full' : t.joint ? t.jointMode || 'full' : null,
+  }))
+
+  const merged = dedup([...transactions, ...enriched])
+
+  if (merged.length === transactions.length) {
+    setStatus(`No new transactions found in ${label}; all were duplicates.`)
+    setPendingImport(null)
+    return
+  }
+
+  if (user) {
+    const payload = enriched.map((t) => ({
+      id: t.id,
+      userid: user.id,
+      date: t.date,
+      description: t.description,
+      merchant: t.merchant || t.description,
+      amount: Number(t.amount || 0),
+      category: t.category || 'Other',
+      split: Boolean(t.split),
+      splitpaid: Boolean(t.splitPaid),
+      joint: Boolean(t.joint),
+      account: t.account || 'personal',
     }))
 
-    const merged = dedup([...transactions, ...enriched])
+    const { error } = await supabase.from('transactions').upsert(payload, {
+      onConflict: 'userid,id',
+    })
 
-    if (merged.length === transactions.length) {
-      setStatus(`No new transactions found in ${label}; all were duplicates.`)
+    if (error) {
+      setStatus(`Imported locally, but cloud save failed: ${error.message}`)
+      setTransactions(merged)
+      setEditingId(null)
+      setActiveTab('Own')
       setPendingImport(null)
       return
     }
-
-    if (user) {
- const payload = enriched.map((t) => ({
-  id: t.id,
-  userid: user.id,
-  date: t.date,
-  description: t.description,
-  merchant: t.merchant || t.description,
-  amount: Number(t.amount || 0),
-  category: t.category || 'Other',
-  split: Boolean(t.split),
-  splitpaid: Boolean(t.splitPaid),
-  joint: Boolean(t.joint),
-  account: t.account || 'personal',
-}))
-
-      const { error } = await supabase.from('transactions').upsert(payload, { onConflict: 'id' })
-
-      if (error) {
-        setStatus(`Imported locally, but cloud save failed: ${error.message}`)
-        setTransactions(merged)
-        setEditingId(null)
-        setActiveTab('Own')
-        setPendingImport(null)
-        return
-      }
-    }
-
-    setTransactions(merged)
-    setEditingId(null)
-    setStatus(
-      user
-        ? `Merged ${merged.length - transactions.length} new transactions from ${label} and saved online.`
-        : `Merged ${merged.length - transactions.length} new transactions from ${label}.`
-    )
-    setActiveTab('Own')
-    setPendingImport(null)
   }
+
+  setTransactions(merged)
+  setEditingId(null)
+  setStatus(
+    user
+      ? `Merged ${merged.length - transactions.length} new transactions from ${label} and saved online.`
+      : `Merged ${merged.length - transactions.length} new transactions from ${label}.`
+  )
+  setActiveTab('Own')
+  setPendingImport(null)
+}
 
   async function handleFile(file) {
     if (!file) return
@@ -1028,7 +1044,7 @@ async function saveEdit(id) {
 
 async function deleteTransaction(id) {
   if (user) {
-    const error = await deleteTransactionFromCloud(id)
+    const error = await deleteTransactionFromCloud(id, user)
     if (error) {
       setStatus(`Cloud delete failed: ${error.message}`)
       return
@@ -1037,9 +1053,7 @@ async function deleteTransaction(id) {
 
   setTransactions((prev) => prev.filter((t) => t.id !== id))
 
-  if (editingId === id) {
-    cancelEdit()
-  }
+  if (editingId === id) cancelEdit()
 
   setStatus(user ? 'Transaction deleted and removed online.' : 'Transaction deleted.')
 }
