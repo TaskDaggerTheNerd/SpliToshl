@@ -555,11 +555,10 @@ export default function App() {
 
     while (keepLoading) {
       const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('date', { ascending: false })
-        .range(from, from + pageSize - 1)
+  .from('transactions')
+  .select('*')
+  .order('date', { ascending: false })
+  .range(from, from + pageSize - 1)
 
       if (error) {
         setStatus(`Cloud load failed: ${error.message}`)
@@ -595,10 +594,9 @@ export default function App() {
     setStatus(`Loaded ${normalized.length} cloud transactions for ${currentUser.displayName || currentUser.username}.`)
   }
 
-  async function addTransactionToCloud(tx, currentUser) {
+async function addTransactionToCloud(tx) {
   const { error } = await supabase.from('transactions').insert({
     id: tx.id,
-    userid: currentUser.id,
     date: tx.date,
     description: tx.description,
     merchant: tx.merchant,
@@ -674,7 +672,6 @@ async function deleteTransactionFromCloud(id) {
     if (user) {
  const payload = enriched.map((t) => ({
   id: t.id,
-  userid: user.id,
   date: t.date,
   description: t.description,
   merchant: t.merchant || t.description,
@@ -824,7 +821,7 @@ async function deleteTransactionFromCloud(id) {
     }
 
     if (user) {
-      const error = await addTransactionToCloud(newTransaction, user)
+      const error = await addTransactionToCloud(newTransaction)
       if (error) {
         setStatus(`Cloud save failed: ${error.message}`)
         return
