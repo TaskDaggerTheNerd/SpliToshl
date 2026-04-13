@@ -500,7 +500,7 @@ export default function App() {
   const cleanPassword = String(password || '').trim()
 
   if (!cleanUsername || !cleanPassword) {
-    setStatus('Enter name and password.')
+    setStatus('Enter username and password.')
     return
   }
 
@@ -510,8 +510,7 @@ export default function App() {
     .ilike('username', cleanUsername)
     .eq('password', cleanPassword)
 
-  console.log('LOGIN DEBUG', { cleanUsername, cleanPassword, data, error })
-
+  
   if (error) {
     setStatus(`Login failed: ${error.message}`)
     return
@@ -537,15 +536,19 @@ export default function App() {
 }
 
   function signOutUser() {
-    setUser(null)
-    setTransactions([])
-    setLoginName('')
-    setLoginPassword('')
-    setEditingId(null)
-    setPendingImport(null)
-    setShowAddModal(false)
-    setStatus('Signed out.')
-  }
+  setUser(null)
+  setTransactions([])
+  setLoginName('')
+  setLoginPassword('')
+  setEditingId(null)
+  setPendingImport(null)
+  setShowAddModal(false)
+  setQuery('')
+  setDateFilter('')
+  setTransactionCategoryFilter('all')
+  setOverviewCategoryFilter('all')
+  setStatus('Signed out.')
+}
 
   async function loadTransactionsFromCloud(currentUser) {
     if (!currentUser?.id) return
@@ -1067,7 +1070,7 @@ export default function App() {
               <input
                 className="field-input login-input"
                 type="text"
-                placeholder="Name"
+                placeholder="Username"
                 value={loginName}
                 onChange={(e) => setLoginName(e.target.value)}
               />
