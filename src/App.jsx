@@ -576,7 +576,7 @@ export default function App() {
       }
     }
 
-    const mapped = allRows.map((t) => ({
+ const mapped = allRows.map((t) => ({
   id: t.id,
   date: t.date,
   description: t.description,
@@ -584,7 +584,7 @@ export default function App() {
   amount: Number(t.amount || 0),
   category: t.category || 'Other',
   split: Boolean(t.split),
-  splitPaid: Boolean(t.splitpaid),
+  splitPaid: false,
   joint: Boolean(t.joint),
   jointMode: null,
   account: t.account || 'personal',
@@ -605,7 +605,6 @@ export default function App() {
     amount: tx.amount,
     category: tx.category,
     split: tx.split,
-    splitpaid: tx.splitPaid,
     joint: tx.joint,
     account: tx.account,
   })
@@ -623,7 +622,6 @@ async function updateTransactionInCloud(tx) {
       amount: tx.amount,
       category: tx.category,
       split: tx.split,
-      splitpaid: tx.splitPaid,
       joint: tx.joint,
       account: tx.account,
     })
@@ -674,7 +672,7 @@ async function deleteTransactionFromCloud(id) {
     }
 
     if (user) {
-      const payload = enriched.map((t) => ({
+ const payload = enriched.map((t) => ({
   id: t.id,
   userid: user.id,
   date: t.date,
@@ -683,7 +681,6 @@ async function deleteTransactionFromCloud(id) {
   amount: Number(t.amount || 0),
   category: t.category || 'Other',
   split: Boolean(t.split),
-  splitpaid: Boolean(t.splitPaid),
   joint: Boolean(t.joint),
   account: t.account || 'personal',
 }))
