@@ -596,23 +596,54 @@ export default function App() {
   }
 
   async function addTransactionToCloud(tx, currentUser) {
-    const { error } = await supabase.from('transactions').insert({
-      id: tx.id,
-      user_id: currentUser.id,
+  const { error } = await supabase.from('transactions').insert({
+    id: tx.id,
+    userid: currentUser.id,
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant,
+    amount: tx.amount,
+    category: tx.category,
+    split: tx.split,
+    splitpaid: tx.splitPaid,
+    joint: tx.joint,
+    jointmode: tx.jointMode,
+    account: tx.account,
+  })
+
+  return error
+}
+
+async function updateTransactionInCloud(tx, currentUser) {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
       date: tx.date,
       description: tx.description,
       merchant: tx.merchant,
       amount: tx.amount,
       category: tx.category,
       split: tx.split,
-      split_paid: tx.splitPaid,
+      splitpaid: tx.splitPaid,
       joint: tx.joint,
-      joint_mode: tx.jointMode,
+      jointmode: tx.jointMode,
       account: tx.account,
     })
+    .eq('id', tx.id)
+    .eq('userid', currentUser.id)
 
-    return error
-  }
+  return error
+}
+
+async function deleteTransactionFromCloud(id, currentUser) {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id)
+    .eq('userid', currentUser.id)
+
+  return error
+}
 
   function importRows(rows, label) {
     const hasAccountFlag = rows.some((r) => r.account)
@@ -891,69 +922,105 @@ export default function App() {
     })
   }
 
-  function saveEdit(id) {
-    const amount = Number(String(editDraft.amount).replace(',', '.'))
+async function saveEdit(id) {
+  const amount = Number(String(editDraft.amount).replace(',', '.'))
 
-    if (!editDraft.date) {
-      setStatus('Date is required.')
+  if (!editDraft.date) {
+    setStatus('Date is required.')
+    return
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    setStatus('Amount must be a valid positive number.')
+    return
+  }
+
+  const original = transactions.find((t) => t.id === id)
+
+  if (!original) {
+    setStatus('Transaction not found.')
+    return
+  }
+
+  const updatedTx = {
+    ...original,
+    date: editDraft.date,
+    description: editDraft.description.trim() || original.description,
+    merchant: editDraft.description.trim() || original.merchant,
+    category: editDraft.category || 'Other',
+    amount,
+    split: original.splitPaid ? false : Boolean(editDraft.split),
+    splitPaid: Boolean(original.splitPaid),
+    joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
+    jointMode:
+      original.account === 'joint'
+        ? 'full'
+        : Boolean(editDraft.joint)
+          ? original.jointMode || 'full'
+          : null,
+  }
+
+  if (user) {
+    const error = await updateTransactionInCloud(updatedTx, user)
+    if (error) {
+      setStatus(`Cloud update failed: ${error.message}`)
       return
     }
+  }
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setStatus('Amount must be a valid positive number.')
-      return
-    }
+  const categoryChanged = original.category !== (editDraft.category || 'Other')
+  const originalDescription = original.description
 
-    const original = transactions.find((t) => t.id === id)
-    const categoryChanged = original && original.category !== (editDraft.category || 'Other')
-    const originalDescription = original?.description
+  setTransactions((prev) =>
+    prev.map((t) => {
+      if (t.id === id) return updatedTx
 
-    setTransactions((prev) =>
-      prev.map((t) => {
-        if (t.id === id) {
-          return {
-            ...t,
-            date: editDraft.date,
-            description: editDraft.description.trim() || t.description,
-            merchant: editDraft.description.trim() || t.merchant,
-            category: editDraft.category || 'Other',
-            amount,
-            split: t.splitPaid ? false : Boolean(editDraft.split),
-            splitPaid: Boolean(t.splitPaid),
-            joint: t.account === 'joint' ? true : Boolean(editDraft.joint),
-            jointMode: null,
-          }
-        }
-
-        if (categoryChanged && originalDescription && t.description === originalDescription) {
-          return { ...t, category: editDraft.category || 'Other' }
-        }
-
-        return t
-      })
-    )
-
-    if (categoryChanged && originalDescription) {
-      const matchCount = transactions.filter((t) => t.id !== id && t.description === originalDescription).length
-      if (matchCount > 0) {
-        setStatus(
-          `Updated. Category "${editDraft.category}" applied to ${matchCount + 1} transactions with description "${originalDescription}".`
-        )
-      } else {
-        setStatus('Transaction updated.')
+      if (categoryChanged && originalDescription && t.description === originalDescription) {
+        return { ...t, category: editDraft.category || 'Other' }
       }
-    } else {
-      setStatus('Transaction updated.')
-    }
 
+      return t
+    })
+  )
+
+  if (categoryChanged && originalDescription) {
+    const matchCount = transactions.filter(
+      (t) => t.id !== id && t.description === originalDescription
+    ).length
+
+    if (matchCount > 0) {
+      setStatus(
+        user
+          ? `Transaction updated and saved online. Category ${editDraft.category || 'Other'} applied to ${matchCount + 1} transactions with description "${originalDescription}".`
+          : `Transaction updated. Category ${editDraft.category || 'Other'} applied to ${matchCount + 1} transactions with description "${originalDescription}".`
+      )
+    } else {
+      setStatus(user ? 'Transaction updated and saved online.' : 'Transaction updated.')
+    }
+  } else {
+    setStatus(user ? 'Transaction updated and saved online.' : 'Transaction updated.')
+  }
+
+  cancelEdit()
+}
+
+async function deleteTransaction(id) {
+  if (user) {
+    const error = await deleteTransactionFromCloud(id, user)
+    if (error) {
+      setStatus(`Cloud delete failed: ${error.message}`)
+      return
+    }
+  }
+
+  setTransactions((prev) => prev.filter((t) => t.id !== id))
+
+  if (editingId === id) {
     cancelEdit()
   }
 
-  function deleteTransaction(id) {
-    setTransactions((prev) => prev.filter((t) => t.id !== id))
-    if (editingId === id) cancelEdit()
-    setStatus('Transaction deleted.')
-  }
+  setStatus(user ? 'Transaction deleted and removed online.' : 'Transaction deleted.')
+}
 
   const forecastByCategory = useMemo(() => {
     const byMonth = new Map()
