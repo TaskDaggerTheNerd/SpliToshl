@@ -905,41 +905,80 @@ async function updateTransactionInCloud(tx, currentUser) {
   setStatus(`Marked ${changed} split transactions as paid.`)
 }
 
-  function toggleSplit(id) {
-    const tx = transactions.find((t) => t.id === id)
-    if (!tx) return
+async function toggleSplit(id) {
+  const tx = transactions.find((t) => t.id === id)
+  if (!tx) return
 
-    if (tx.splitPaid) {
-      setStatus('This transaction was already split and paid in the past.')
-      return
-    }
-
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, split: !t.split } : t)))
-    setStatus('Split updated.')
+  if (tx.splitPaid) {
+    setStatus('This transaction was already split and paid in the past.')
+    return
   }
 
-  function toggleJoint(id) {
-    const tx = transactions.find((t) => t.id === id)
-    if (!tx) return
-
-    if (tx.account === 'joint') {
-      setStatus('This transaction already comes from a Joint statement.')
-      return
-    }
-
-    if (tx.joint) {
-      setTransactions((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, joint: false, jointMode: null } : t))
-      )
-      setStatus('Removed from Joint tab.')
-      return
-    }
-
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, joint: true, jointMode: null } : t))
-    )
-    setStatus('Added to Joint tab.')
+  const updatedTransaction = {
+    ...tx,
+    split: !tx.split,
   }
+
+  if (user) {
+    const error = await updateTransactionInCloud(updatedTransaction, user)
+    if (error) {
+      setStatus(`Cloud save failed: ${error.message}`)
+      return
+    }
+  }
+
+  setTransactions((prev) =>
+    prev.map((t) => (t.id === id ? updatedTransaction : t))
+  )
+
+  setStatus(
+    updatedTransaction.split
+      ? 'Split updated and saved online.'
+      : 'Split removed and saved online.'
+  )
+}
+
+async function toggleJoint(id) {
+  const tx = transactions.find((t) => t.id === id)
+  if (!tx) return
+
+  if (tx.account === 'joint') {
+    setStatus('This transaction already comes from a Joint statement.')
+    return
+  }
+
+  const updatedTransaction = tx.joint
+    ? {
+        ...tx,
+        joint: false,
+        jointMode: null,
+        account: 'personal',
+      }
+    : {
+        ...tx,
+        joint: true,
+        jointMode: null,
+        account: 'joint',
+      }
+
+  if (user) {
+    const error = await updateTransactionInCloud(updatedTransaction, user)
+    if (error) {
+      setStatus(`Cloud save failed: ${error.message}`)
+      return
+    }
+  }
+
+  setTransactions((prev) =>
+    prev.map((t) => (t.id === id ? updatedTransaction : t))
+  )
+
+  setStatus(
+    updatedTransaction.joint
+      ? 'Added to Joint tab and saved online.'
+      : 'Removed from Joint tab and saved online.'
+  )
+}
 
   function startEdit(t) {
     setEditingId(t.id)
