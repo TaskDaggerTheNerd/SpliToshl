@@ -28,7 +28,7 @@ import {
 } from './utils'
 import { saveToIDB, clearIDB, exportJSON, importJSON } from './storage'
 import { supabase } from './supabase'
-import { generatePDFReport } from './report'
+import { generatePDFReport, generateSplitPDFReport } from './report'
 
 const PALETTE = [
   '#01696f',
@@ -782,6 +782,11 @@ async function updateTransactionInCloud(tx, currentUser) {
     generatePDFReport(transactions)
     setStatus('PDF downloaded.')
   }
+
+  function handleSplitPDF() {
+  generateSplitPDFReport(transactions)
+  setStatus('Split PDF downloaded.')
+}
 
   function handleClear() {
     if (!transactions.length) {
@@ -1961,11 +1966,26 @@ async function deleteTransaction(id) {
           <>
             <div className="panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                <h2>Monthly Split Balance</h2>
-                <button type="button" className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>
-                  Paid
-                </button>
-              </div>
+  <h2>Monthly Split Balance</h2>
+
+  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+    <button
+      type="button"
+      className="btn btn-small"
+      onClick={handleSplitPDF}
+    >
+      Split PDF
+    </button>
+
+    <button
+      type="button"
+      className="btn btn-small btn-primary"
+      onClick={markAllSplitsPaid}
+    >
+      Paid
+    </button>
+  </div>
+</div>
               <p className="subtle-note">50% of each split transaction is counted as owed to you.</p>
               <div className="table-wrap">
                 <table className="data-table">

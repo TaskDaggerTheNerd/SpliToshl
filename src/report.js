@@ -437,3 +437,89 @@ export function generatePDFReport(transactions = []) {
 
   doc.save(`expense-report-${year}.pdf`)
 }
+
+export function generateSplitPDFReport(transactions = []) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const today = new Date().toLocaleDateString('pt-PT')
+
+  const splitRows = transactions
+    .filter((t) => t.split)
+    .map((t) => {
+      const totalAmount = Math.abs(Number(t.amount) || 0)
+      const owedAmount = totalAmount / 2
+      return {
+        date: t.date || '—',
+        description: t.description || t.merchant || '—',
+        category: t.category || 'Other',
+        totalAmount,
+        owedAmount,
+      }
+    })
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+
+  const totalAmount = splitRows.reduce((sum, row) => sum + row.totalAmount, 0)
+  const totalOwed = splitRows.reduce((sum, row) => sum + row.owedAmount, 0)
+
+  addHeader(doc, 'Split Expenses Report', `Generated ${today}`)
+
+  let y = 30
+  doc.setTextColor(...DARK)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(13)
+  doc.text('Open split transactions', PAGE.mx, y)
+  y += 6
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(...MUTED)
+  doc.text(
+    'This report includes all transactions currently marked as Split, with the full expense amount and the 50% owed amount.',
+    PAGE.mx,
+    y,
+    { maxWidth: PAGE.w - PAGE.mx * 2 }
+  )
+  y += 10
+
+  y = addInsightBox(
+    doc,
+    'Split summary',
+    [
+      `Transactions: ${splitRows.length}`,
+      `Total expense amount: ${fmtEUR(totalAmount)}`,
+      `Total owed to you: ${fmtEUR(totalOwed)}`,
+    ],
+    y,
+    TEAL_SOFT
+  )
+
+  y = addTable(
+    doc,
+    'Split transaction details',
+    [['Date', 'Description', 'Category', 'Total Amount', 'Owed Amount']],
+    splitRows.length
+      ? [
+          ...splitRows.map((row) => [
+            row.date,
+            row.description,
+            row.category,
+            fmtEUR(row.totalAmount),
+            fmtEUR(row.owedAmount),
+          ]),
+          ['Total', '', '', fmtEUR(totalAmount), fmtEUR(totalOwed)],
+        ]
+      : [['—', 'No split transactions found', '—', '—', '—']],
+    y,
+    {
+      styles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 24 },
+        1: { cellWidth: 72 },
+        2: { cellWidth: 34 },
+        3: { halign: 'right', cellWidth: 28 },
+        4: { halign: 'right', cellWidth: 28 },
+      },
+    }
+  )
+
+  doc.save(`split-expenses-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+}
