@@ -84,6 +84,14 @@ export function parseAmount(value) {
 
 export function parseDate(value) {
   if (!value) return ''
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const raw = String(value).trim()
   if (!raw) return ''
 
@@ -93,7 +101,12 @@ export function parseDate(value) {
     const serial = parseInt(raw, 10)
     if (serial > 40000 && serial < 60000) {
       const date = new Date(Date.UTC(1899, 11, 30) + serial * 86400000)
-      if (!isNaN(date)) return date.toISOString().slice(0, 10)
+      if (!Number.isNaN(date.getTime())) {
+        const year = date.getUTCFullYear()
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const day = String(date.getUTCDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
     }
   }
 
@@ -116,7 +129,12 @@ export function parseDate(value) {
   }
 
   const parsed = new Date(raw)
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear()
+    const month = String(parsed.getMonth() + 1).padStart(2, '0')
+    const day = String(parsed.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
 
   return ''
 }
