@@ -183,7 +183,16 @@ export function normalizeTransactions(rows = []) {
 
       return {
         ...row,
-        id: String(raw.id ?? `${date || 'no-date'}-${description || 'no-desc'}-${idx}`),
+        id: String(
+          raw.id ??
+            [
+              date || 'no-date',
+              description || 'no-desc',
+              amount || 0,
+              raw['completed date'] ?? raw['started date'] ?? raw['value date'] ?? '',
+              idx,
+            ].join('|')
+        ),
         date,
         description,
         merchant,
@@ -197,8 +206,9 @@ export function normalizeTransactions(rows = []) {
 
 export function dedup(rows = []) {
   const seen = new Set()
-  return rows.filter((r) => {
-    const key = `${r.date}|${r.description}|${r.amount}`
+
+  return rows.filter((r, idx) => {
+    const key = String(r.id ?? `row-${idx}`)
     if (seen.has(key)) return false
     seen.add(key)
     return true
