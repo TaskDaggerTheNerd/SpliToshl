@@ -438,91 +438,42 @@ export function generatePDFReport(transactions = []) {
   doc.save(`expense-report-${year}.pdf`)
 }
 
-export function generateSplitPDFReport({
-  currentUser,
-  partnerUser,
-  myTransactions = [],
-  partnerTransactions = [],
-  myOpenSplitTotal = 0,
-  partnerOpenSplitTotal = 0,
-  netSplitBalance = 0,
-} = {}) {
+export function generateSplitPDFReport(transactions = []) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const today = new Date().toLocaleDateString('pt-PT')
 
-  const myName = currentUser?.displayName || currentUser?.username || 'You'
-  const partnerName = partnerUser?.displayName || partnerUser?.username || 'Partner'
-  const netAbs = Math.abs(Number(netSplitBalance) || 0)
-
-  let netLabel = 'You are settled'
-  if (netSplitBalance > 0.004) netLabel = `${partnerName} owes ${myName}`
-  else if (netSplitBalance < -0.004) netLabel = `${myName} owes ${partnerName}`
-
-  const myRows = myTransactions
-    .map(t => ({
-      date: t.date || '—',
-      description: t.description || t.merchant || '—',
-      category: t.category || 'Other',
-      total: Math.abs(Number(t.amount) || 0),
-      half: Math.abs(Number(t.amount) || 0) / 2,
-    }))
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-
-  const partnerRows = partnerTransactions
-    .map(t => ({
-      date: t.date || '—',
-      description: t.description || t.merchant || '—',
-      category: t.category || 'Other',
-      total: Math.abs(Number(t.amount) || 0),
-      half: Math.abs(Number(t.amount) || 0) / 2,
-    }))
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-
-  const monthlyMap = new Map()
-
-  myRows.forEach(row => {
-    const month = String(row.date).slice(0, 7)
-    if (!month || month.length !== 7) return
-    const current = monthlyMap.get(month) || { mine: 0, partner: 0 }
-    current.mine += row.half
-    monthlyMap.set(month, current)
-  })
-
-  partnerRows.forEach(row => {
-    const month = String(row.date).slice(0, 7)
-    if (!month || month.length !== 7) return
-    const current = monthlyMap.get(month) || { mine: 0, partner: 0 }
-    current.partner += row.half
-    monthlyMap.set(month, current)
-  })
-
-  const monthlyRows = [...monthlyMap.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([month, vals]) => {
-      const net = vals.mine - vals.partner
-      return [
-        month,
-        fmtEUR(vals.mine),
-        fmtEUR(vals.partner),
-        fmtEUR(Math.abs(net)),
-        net > 0.004 ? `${partnerName} owes ${myName}` : net < -0.004 ? `${myName} owes ${partnerName}` : 'Settled',
-      ]
+  const splitRows = transactions
+    .filter((t) => t.split)
+    .map((t) => {
+      const totalAmount = Math.abs(Number(t.amount) || 0)
+      const owedAmount = totalAmount / 2
+      return {
+        date: t.date || '—',
+        description: t.description || t.merchant || '—',
+        category: t.category || 'Other',
+        totalAmount,
+        owedAmount,
+      }
     })
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
-  addHeader(doc, 'Split Balance Report', `Generated ${today}`)
+  const totalAmount = splitRows.reduce((sum, row) => sum + row.totalAmount, 0)
+  const totalOwed = splitRows.reduce((sum, row) => sum + row.owedAmount, 0)
+
+  addHeader(doc, 'Split Expenses Report', `Generated ${today}`)
 
   let y = 30
   doc.setTextColor(...DARK)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
-  doc.text('Open split balances', PAGE.mx, y)
+  doc.text('Open split transactions', PAGE.mx, y)
   y += 6
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(...MUTED)
   doc.text(
-    'This report compares open split transactions for both users, shows the monthly net balance, and lists each split transaction behind the result.',
+    'This report includes all transactions currently marked as Split, with the full expense amount and the 50% owed amount.',
     PAGE.mx,
     y,
     { maxWidth: PAGE.w - PAGE.mx * 2 }
@@ -531,114 +482,44 @@ export function generateSplitPDFReport({
 
   y = addInsightBox(
     doc,
-    'Net split summary',
+    'Split summary',
     [
-      `${myName} open split total: ${fmtEUR(myOpenSplitTotal)}`,
-      `${partnerName} open split total: ${fmtEUR(partnerOpenSplitTotal)}`,
-      `${netLabel}: ${fmtEUR(netAbs)}`,
+      `Transactions: ${splitRows.length}`,
+      `Total expense amount: ${fmtEUR(totalAmount)}`,
+      `Total owed to you: ${fmtEUR(totalOwed)}`,
     ],
     y,
-    TEALSOFT
+    TEAL_SOFT
   )
 
   y = addTable(
     doc,
-    'Monthly net balance',
-    [['Month', `${myName} side`, `${partnerName} side`, 'Net', 'Status']],
-    monthlyRows.length
+    'Split transaction details',
+    [['Date', 'Description', 'Category', 'Total Amount', 'Owed Amount']],
+    splitRows.length
       ? [
-          ...monthlyRows,
-          [
-            'Total',
-            fmtEUR(myOpenSplitTotal),
-            fmtEUR(partnerOpenSplitTotal),
-            fmtEUR(netAbs),
-            netLabel,
-          ],
+          ...splitRows.map((row) => [
+            row.date,
+            row.description,
+            row.category,
+            fmtEUR(row.totalAmount),
+            fmtEUR(row.owedAmount),
+          ]),
+          ['Total', '', '', fmtEUR(totalAmount), fmtEUR(totalOwed)],
         ]
-      : [['—', '—', '—', '—', 'No open split transactions']],
+      : [['—', 'No split transactions found', '—', '—', '—']],
     y,
     {
       styles: { fontSize: 8 },
       columnStyles: {
         0: { cellWidth: 24 },
-        1: { halign: 'right', cellWidth: 30 },
-        2: { halign: 'right', cellWidth: 30 },
-        3: { halign: 'right', cellWidth: 28 },
-        4: { cellWidth: 60 },
-      },
-    }
-  )
-
-  if (y > 210) {
-    doc.addPage()
-    addHeader(doc, 'Split Balance Report', `Generated ${today}`)
-    y = 28
-  }
-
-  y = addTable(
-    doc,
-    `${myName} open split transactions`,
-    [['Date', 'Description', 'Category', 'Total Amount', 'Recoverable Half']],
-    myRows.length
-      ? [
-          ...myRows.map(row => [
-            row.date,
-            row.description,
-            row.category,
-            fmtEUR(row.total),
-            fmtEUR(row.half),
-          ]),
-          ['Total', '', '', '', fmtEUR(myOpenSplitTotal)],
-        ]
-      : [['—', 'No open split transactions', '—', '—', '—']],
-    y,
-    {
-      styles: { fontSize: 8 },
-      columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 74 },
-        2: { cellWidth: 28 },
+        1: { cellWidth: 72 },
+        2: { cellWidth: 34 },
         3: { halign: 'right', cellWidth: 28 },
         4: { halign: 'right', cellWidth: 28 },
       },
     }
   )
 
-  if (y > 210) {
-    doc.addPage()
-    addHeader(doc, 'Split Balance Report', `Generated ${today}`)
-    y = 28
-  }
-
-  addTable(
-    doc,
-    `${partnerName} open split transactions`,
-    [['Date', 'Description', 'Category', 'Total Amount', 'Recoverable Half']],
-    partnerRows.length
-      ? [
-          ...partnerRows.map(row => [
-            row.date,
-            row.description,
-            row.category,
-            fmtEUR(row.total),
-            fmtEUR(row.half),
-          ]),
-          ['Total', '', '', '', fmtEUR(partnerOpenSplitTotal)],
-        ]
-      : [['—', 'No open split transactions', '—', '—', '—']],
-    y,
-    {
-      styles: { fontSize: 8 },
-      columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 74 },
-        2: { cellWidth: 28 },
-        3: { halign: 'right', cellWidth: 28 },
-        4: { halign: 'right', cellWidth: 28 },
-      },
-    }
-  )
-
-  doc.save(`split-balance-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+  doc.save(`split-expenses-report-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
