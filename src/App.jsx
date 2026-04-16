@@ -403,6 +403,47 @@ const splitBalanceLabel = useMemo(() => {
 
 const splitBalanceValue = Math.abs(netSplitBalance)
 
+const partnerSplitRows = useMemo(() => {
+  const m = new Map()
+  partnerSplitTransactions.forEach(t => {
+    const month = String(t.date).slice(0, 7)
+    if (month.length === 7) {
+      m.set(month, (m.get(month) || 0) + Math.abs(Number(t.amount) || 0) / 2)
+    }
+  })
+  return [...m.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, owed]) => ({ month, owed }))
+}, [partnerSplitTransactions])
+
+const netSplitRows = useMemo(() => {
+  const months = new Set([
+    ...splitRows.map(r => r.month),
+    ...partnerSplitRows.map(r => r.month),
+  ])
+
+  return [...months]
+    .sort((a, b) => a.localeCompare(b))
+    .map(month => {
+      const mine = splitRows.find(r => r.month === month)?.owed || 0
+      const partner = partnerSplitRows.find(r => r.month === month)?.owed || 0
+      const net = mine - partner
+      return {
+        month,
+        mine,
+        partner,
+        net,
+        label:
+          net > 0.004
+            ? `${partnerUser?.displayName || 'Partner'} owes you`
+            : net < -0.004
+              ? `You owe ${partnerUser?.displayName || 'Partner'}`
+              : 'Settled',
+        amount: Math.abs(net),
+      }
+    })
+}, [splitRows, partnerSplitRows, partnerUser])
+
 // Monthly rows: my side per month
 const splitRows = useMemo(() => {
   const m = new Map()
@@ -832,7 +873,15 @@ async function updateTransactionInCloud(tx, currentUser) {
   }
 
   function handleSplitPDF() {
-  generateSplitPDFReport(transactions)
+  generateSplitPDFReport({
+    currentUser: user,
+    partnerUser,
+    myTransactions: myOpenSplitTransactions,
+    partnerTransactions: partnerSplitTransactions,
+    myOpenSplitTotal,
+    partnerOpenSplitTotal,
+    netSplitBalance,
+  })
   setStatus('Split PDF downloaded.')
 }
 
@@ -2007,71 +2056,196 @@ async function deleteTransaction(id) {
           </div>
         ))}
 
-      {activeTab === 'Splits' &&
-        (splitRows.length === 0 ? (
-          <EmptyState message="Go to Transactions and set Split to Yes on any shared expense." />
-        ) : (
-          <>
-            <div className="panel">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-<h2>Split Balance</h2>
-<div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-  {partnerUser && (
-    <span className="muted" style={{ fontSize: '0.82rem' }}>
-      vs {partnerUser.displayName}
-    </span>
-  )}
-  <button type="button" className="btn btn-small" onClick={handleSplitPDF}>Split PDF</button>
-  <button type="button" className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>Paid</button>
-</div>
-</div>
-              <p className="subtle-note">50% of each split transaction is counted as owed to you.</p>
-              {partnerUser && (
-  <div style={{
-    display: 'flex', gap: '1rem', flexWrap: 'wrap', margin: '0.75rem 0',
-    padding: '0.75rem 1rem',
-    background: 'var(--color-surface-offset)',
-    borderRadius: 'var(--radius-md)',
-    fontSize: '0.9rem'
-  }}>
-    <span>
-      <span className="muted">Your open splits: </span>
-      <strong>{fmtEUR(myOpenSplitTotal)}</strong>
-    </span>
-    <span>
-      <span className="muted">{partnerUser.displayName}'s open splits: </span>
-      <strong>{fmtEUR(partnerOpenSplitTotal)}</strong>
-    </span>
-    <span style={{ color: netSplitBalance > 0.004 ? 'var(--color-success)' : netSplitBalance < -0.004 ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
-      <strong>{splitBalanceLabel}: {fmtEUR(splitBalanceValue)}</strong>
-    </span>
-  </div>
-)}
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Month</th>
-                      <th>Owed to You</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {splitRows.map((r) => (
-                      <tr key={r.month}>
-                        <td>{r.month}</td>
-                        <td className="amount">{fmtEUR(r.owed)}</td>
+{activeTab === 'Splits' ? (
+  myOpenSplitTransactions.length === 0 && partnerSplitTransactions.length === 0 ? (
+    <EmptyState message="Go to Transactions and set Split to Yes on any shared expense." />
+  ) : (
+    <div className="grid-2">
+      <div className="panel" style={{ gridColumn: '1 / -1' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <h2>Split Balance</h2>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {partnerUser && (
+              <span className="muted" style={{ fontSize: '0.82rem' }}>
+                vs {partnerUser.displayName}
+              </span>
+            )}
+            <button type="button" className="btn btn-small" onClick={handleSplitPDF}>
+              Split PDF
+            </button>
+            <button type="button" className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>
+              Paid
+            </button>
+          </div>
+        </div>
+
+        <p className="subtle-note">
+          Each split transaction counts as 50% owed by the other person. The net balance compares your open split expenses against your partner’s open split expenses.
+        </p>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            margin: '0.75rem 0 1rem',
+            padding: '0.85rem 1rem',
+            background: 'var(--color-surface-offset)',
+            borderRadius: '12px',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          <span>
+            <span className="muted">Your open splits: </span>
+            <strong>{fmtEUR(myOpenSplitTotal)}</strong>
+          </span>
+
+          <span>
+            <span className="muted">{partnerUser?.displayName || 'Partner'} open splits: </span>
+            <strong>{fmtEUR(partnerOpenSplitTotal)}</strong>
+          </span>
+
+          <span
+            style={{
+              color:
+                netSplitBalance > 0.004
+                  ? 'var(--color-success)'
+                  : netSplitBalance < -0.004
+                    ? 'var(--color-warning)'
+                    : 'var(--color-text-muted)',
+            }}
+          >
+            <strong>{splitBalanceLabel}: {fmtEUR(splitBalanceValue)}</strong>
+          </span>
+        </div>
+
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Your side</th>
+                <th>{partnerUser?.displayName || 'Partner'} side</th>
+                <th>Net</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {netSplitRows.map(row => (
+                <tr key={row.month}>
+                  <td>{row.month}</td>
+                  <td className="amount">{fmtEUR(row.mine)}</td>
+                  <td className="amount">{fmtEUR(row.partner)}</td>
+                  <td className="amount">{fmtEUR(row.amount)}</td>
+                  <td>{row.label}</td>
+                </tr>
+              ))}
+              <tr className="total-row">
+                <td>Total</td>
+                <td className="amount">{fmtEUR(myOpenSplitTotal)}</td>
+                <td className="amount">{fmtEUR(partnerOpenSplitTotal)}</td>
+                <td className="amount">{fmtEUR(splitBalanceValue)}</td>
+                <td>{splitBalanceLabel}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>Your Open Split Transactions</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Total Amount</th>
+                <th>Your Recoverable Half</th>
+              </tr>
+            </thead>
+            <tbody>
+              {myOpenSplitTransactions.length > 0 ? (
+                <>
+                  {myOpenSplitTransactions
+                    .slice()
+                    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+                    .map(t => (
+                      <tr key={t.id}>
+                        <td>{t.date}</td>
+                        <td>{t.description}</td>
+                        <td>{t.category || 'Other'}</td>
+                        <td className="amount">{fmtEUR(Math.abs(Number(t.amount) || 0))}</td>
+                        <td className="amount">{fmtEUR(Math.abs(Number(t.amount) || 0) / 2)}</td>
                       </tr>
                     ))}
-                    <tr className="total-row">
-                      <td>Total</td>
-                      <td className="amount">{fmtEUR(splitTotal)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        ))}
+                  <tr className="total-row">
+                    <td>Total</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td className="amount">{fmtEUR(myOpenSplitTotal)}</td>
+                  </tr>
+                </>
+              ) : (
+                <tr>
+                  <td colSpan="5" className="muted">No open split transactions on your side.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h2>{partnerUser?.displayName || 'Partner'} Open Split Transactions</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Total Amount</th>
+                <th>Their Recoverable Half</th>
+              </tr>
+            </thead>
+            <tbody>
+              {partnerSplitTransactions.length > 0 ? (
+                <>
+                  {partnerSplitTransactions
+                    .slice()
+                    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+                    .map(t => (
+                      <tr key={t.id}>
+                        <td>{t.date}</td>
+                        <td>{t.description}</td>
+                        <td>{t.category || 'Other'}</td>
+                        <td className="amount">{fmtEUR(Math.abs(Number(t.amount) || 0))}</td>
+                        <td className="amount">{fmtEUR(Math.abs(Number(t.amount) || 0) / 2)}</td>
+                      </tr>
+                    ))}
+                  <tr className="total-row">
+                    <td>Total</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td className="amount">{fmtEUR(partnerOpenSplitTotal)}</td>
+                  </tr>
+                </>
+              ) : (
+                <tr>
+                  <td colSpan="5" className="muted">No open split transactions on your partner’s side.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+) : null}
 
       {showAddModal && (
         <div className="modal-backdrop" onClick={closeManualAdd}>
