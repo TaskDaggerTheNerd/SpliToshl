@@ -2070,32 +2070,6 @@ async function deleteTransaction(id) {
                 </table>
               </div>
             </div>
-
-            {splitBreakdownByMonthCategory.length > 0 && (
-              <div className="panel">
-                <h2>Split Debt by Month Category</h2>
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Month</th>
-                        <th>Category</th>
-                        <th>Owed to You</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {splitBreakdownByMonthCategory.map((row) => (
-                        <tr key={`${row.month}-${row.category}`}>
-                          <td>{row.month}</td>
-                          <td>{row.category}</td>
-                          <td className="amount">{fmtEUR(row.owed)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </>
         ))}
 
