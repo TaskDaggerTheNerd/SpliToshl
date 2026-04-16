@@ -138,6 +138,9 @@ export default function App() {
   const [jointSortConfig, setJointSortConfig] = useState({ key: 'date', direction: 'desc' })
   const [pendingImport, setPendingImport] = useState(null)
 
+  const [partnerUser, setPartnerUser] = useState(null)
+  const [partnerSplitTransactions, setPartnerSplitTransactions] = useState([])
+
   const [user, setUser] = useState(null)
   const [loginName, setLoginName] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -173,6 +176,10 @@ export default function App() {
   if (!user) return
   saveToIDB({ transactions })
 }, [transactions, user])
+
+useEffect(() => {
+  if (user) loadPartnerData(user)
+}, [user])
 
   const myTransactions = useMemo(() => {
     return transactions.map((t) => {
@@ -365,42 +372,51 @@ export default function App() {
     [myTransactions]
   )
 
-  const splitSummary = useMemo(() => buildSplitSummary(transactions), [transactions])
+  // My open split transactions (unpaid)
+const myOpenSplitTransactions = useMemo(
+  () => transactions.filter(t => t.split && !t.splitPaid),
+  [transactions]
+)
 
-  const splitRows = useMemo(() => {
-    return [...splitSummary.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([month, owed]) => ({ month, owed }))
-  }, [splitSummary])
+// Partner open split transactions (fetched from Supabase)
+const partnerOpenSplitTotal = useMemo(
+  () => partnerSplitTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0) / 2, 0),
+  [partnerSplitTransactions]
+)
 
-  const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [splitRows])
+const myOpenSplitTotal = useMemo(
+  () => myOpenSplitTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0) / 2, 0),
+  [myOpenSplitTransactions]
+)
 
-  const splitBreakdownByMonthCategory = useMemo(() => {
-    const rows = transactions
-      .filter((t) => t.split)
-      .map((t) => ({
-        month: getMonthKey(t.date),
-        category: t.category || 'Other',
-        owed: Math.abs(Number(t.amount || 0)) / 2,
-      }))
-      .filter((r) => r.month)
+// Net: positive = partner owes you, negative = you owe partner
+const netSplitBalance = useMemo(
+  () => myOpenSplitTotal - partnerOpenSplitTotal,
+  [myOpenSplitTotal, partnerOpenSplitTotal]
+)
 
-    const grouped = new Map()
-    rows.forEach((r) => {
-      const key = `${r.month}|${r.category}`
-      grouped.set(key, (grouped.get(key) || 0) + r.owed)
-    })
+const splitBalanceLabel = useMemo(() => {
+  if (netSplitBalance > 0.004) return `${partnerUser?.displayName || 'Partner'} owes you`
+  if (netSplitBalance < -0.004) return `You owe ${partnerUser?.displayName || 'Partner'}`
+  return 'You are settled'
+}, [netSplitBalance, partnerUser])
 
-    return [...grouped.entries()]
-      .map(([key, owed]) => {
-        const [month, category] = key.split('|')
-        return { month, category, owed }
-      })
-      .sort((a, b) => {
-        if (a.month !== b.month) return a.month.localeCompare(b.month)
-        return a.category.localeCompare(b.category)
-      })
-  }, [transactions])
+const splitBalanceValue = Math.abs(netSplitBalance)
+
+// Monthly rows: my side per month
+const splitRows = useMemo(() => {
+  const m = new Map()
+  myOpenSplitTransactions.forEach(t => {
+    const month = String(t.date).slice(0, 7)
+    if (month.length === 7) m.set(month, (m.get(month) || 0) + Math.abs(Number(t.amount) || 0) / 2)
+  })
+  return [...m.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, owed]) => ({ month, owed }))
+}, [myOpenSplitTransactions])
+
+const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [splitRows])
+
 
   const getSubscriptionKeyFromDescription = (description) => {
     const d = String(description || '').toLowerCase()
@@ -489,44 +505,74 @@ export default function App() {
 
   const hasData = transactions.length > 0
 
-  async function signInWithNamePassword(username, password) {
-  const cleanUsername = String(username || '').trim().toLowerCase()
-  const cleanPassword = String(password || '').trim()
-
-  if (!cleanUsername || !cleanPassword) {
-    setStatus('Enter username and password.')
-    return
-  }
-
+ async function signInWithNamePassword(username, password) {
+  const cleanUsername = String(username).trim().toLowerCase()
+  const cleanPassword = String(password).trim()
+  if (!cleanUsername || !cleanPassword) { setStatus('Enter username and password.'); return }
   const { data, error } = await supabase
     .from('app_users')
     .select('*')
     .ilike('username', cleanUsername)
     .eq('password', cleanPassword)
-
-  
-  if (error) {
-    setStatus(`Login failed: ${error.message}`)
-    return
-  }
-
-  if (!data || data.length === 0) {
-    setStatus('No matching user found in app_users.')
-    return
-  }
-
+  if (error) { setStatus('Login failed: ' + error.message); return }
+  if (!data || data.length === 0) { setStatus('No matching user found.'); return }
   const row = data[0]
-
   const appUser = {
     id: row.id,
-    username: row.username,
+    username: String(row.username || '').trim().toLowerCase(),
     displayName: row.display_name || row.username,
+    partnerUsername: String(row.partner_username || '').trim().toLowerCase(),
   }
-
   setUser(appUser)
   setLoginPassword('')
-  setStatus(`Signed in as ${appUser.displayName}.`)
+  setStatus('Signed in as ' + appUser.displayName + '.')
   await loadTransactionsFromCloud(appUser)
+  await loadPartnerData(appUser)
+}
+
+async function loadPartnerData(currentUser) {
+  if (!currentUser?.partnerUsername) {
+    setPartnerUser(null)
+    setPartnerSplitTransactions([])
+    return
+  }
+  const { data: userData, error: userErr } = await supabase
+    .from('app_users')
+    .select('*')
+    .ilike('username', currentUser.partnerUsername)
+    .limit(1)
+  if (userErr || !userData || userData.length === 0) {
+    setPartnerUser(null)
+    setPartnerSplitTransactions([])
+    return
+  }
+  const pRow = userData[0]
+  const partner = {
+    id: pRow.id,
+    username: String(pRow.username || '').trim().toLowerCase(),
+    displayName: pRow.display_name || pRow.username,
+  }
+  setPartnerUser(partner)
+
+  const { data: txData, error: txErr } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('userid', partner.id)
+    .eq('split', true)
+    .eq('splitpaid', false)
+  if (txErr) { setPartnerSplitTransactions([]); return }
+  setPartnerSplitTransactions(
+    (txData || []).map(t => ({
+      id: t.id,
+      date: t.date,
+      description: t.description,
+      merchant: t.merchant || t.description,
+      amount: Number(t.amount) || 0,
+      category: t.category || 'Other',
+      split: true,
+      splitPaid: false,
+    }))
+  )
 }
 
   async function signOutUser() {
@@ -543,6 +589,8 @@ export default function App() {
   setTransactionCategoryFilter('all')
   setOverviewCategoryFilter('all')
   setStatus('Signed out.')
+  setPartnerUser(null)
+  setPartnerSplitTransactions([])
 }
 
   async function loadTransactionsFromCloud(currentUser) {
@@ -1277,8 +1325,8 @@ async function deleteTransaction(id) {
           <div className="value">{fmtEUR(jointTotal)}</div>
         </div>
         <div className="kpi-card accent">
-          <div className="label">Split Balance owed to you</div>
-          <div className="value">{fmtEUR(splitTotal)}</div>
+           <div className="label">{splitBalanceLabel}</div>
+           <div className="value">{fmtEUR(splitBalanceValue)}</div>
         </div>
       </section>
 
@@ -1291,7 +1339,7 @@ async function deleteTransaction(id) {
             onClick={() => setActiveTab(tab)}
           >
             {tab}
-            {tab === 'Splits' && splitTotal > 0 ? ` · ${fmtEUR(splitTotal)}` : ''}
+            {tab === 'Splits' && splitBalanceValue > 0.004 ? fmtEUR(splitBalanceValue) : null}
           </button>
         ))}
       </nav>
@@ -1966,27 +2014,39 @@ async function deleteTransaction(id) {
           <>
             <div className="panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-  <h2>Monthly Split Balance</h2>
-
-  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-    <button
-      type="button"
-      className="btn btn-small"
-      onClick={handleSplitPDF}
-    >
-      Split PDF
-    </button>
-
-    <button
-      type="button"
-      className="btn btn-small btn-primary"
-      onClick={markAllSplitsPaid}
-    >
-      Paid
-    </button>
-  </div>
+<h2>Split Balance</h2>
+<div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+  {partnerUser && (
+    <span className="muted" style={{ fontSize: '0.82rem' }}>
+      vs {partnerUser.displayName}
+    </span>
+  )}
+  <button type="button" className="btn btn-small" onClick={handleSplitPDF}>Split PDF</button>
+  <button type="button" className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>Paid</button>
+</div>
 </div>
               <p className="subtle-note">50% of each split transaction is counted as owed to you.</p>
+              {partnerUser && (
+  <div style={{
+    display: 'flex', gap: '1rem', flexWrap: 'wrap', margin: '0.75rem 0',
+    padding: '0.75rem 1rem',
+    background: 'var(--color-surface-offset)',
+    borderRadius: 'var(--radius-md)',
+    fontSize: '0.9rem'
+  }}>
+    <span>
+      <span className="muted">Your open splits: </span>
+      <strong>{fmtEUR(myOpenSplitTotal)}</strong>
+    </span>
+    <span>
+      <span className="muted">{partnerUser.displayName}'s open splits: </span>
+      <strong>{fmtEUR(partnerOpenSplitTotal)}</strong>
+    </span>
+    <span style={{ color: netSplitBalance > 0.004 ? 'var(--color-success)' : netSplitBalance < -0.004 ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+      <strong>{splitBalanceLabel}: {fmtEUR(splitBalanceValue)}</strong>
+    </span>
+  </div>
+)}
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
