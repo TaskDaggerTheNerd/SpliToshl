@@ -110,6 +110,18 @@ function parseCSVfile(file) {
   })
 }
 
+function makeJointGroupId(tx) {
+  if (tx?.jointGroupId) return tx.jointGroupId
+  return `joint_${tx.date || 'nodate'}_${(tx.description || 'expense')
+    .replace(/\s+/g, '-')
+    .slice(0, 30)}_${tx.id || Date.now()}`
+}
+
+function getPartnerUserId(currentUser) {
+  if (!currentUser?.id) return null
+  return currentUser.id === 1 ? 2 : 1
+}
+
 function getMonthKey(dateStr) {
   const d = String(dateStr || '')
   return d.length >= 7 ? d.slice(0, 7) : ''
@@ -161,6 +173,25 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  useEffect(() => {
+  if (!user?.id) return
+
+  const channel = supabase
+    .channel(`transactions-live-${user.id}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'transactions' },
+      () => {
+        loadTransactionsFromCloud(user)
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [user])
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 640)
@@ -575,6 +606,82 @@ async function loadPartnerData(currentUser) {
   )
 }
 
+async function syncJointTransaction(tx, currentUser) {
+  if (!currentUser?.id) return null
+
+  const partnerId = getPartnerUserId(currentUser)
+  if (!partnerId) return null
+
+  const jointGroupId = makeJointGroupId(tx)
+
+  const base = {
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant || tx.description,
+    amount: Number(tx.amount) || 0,
+    category: tx.category || 'Other',
+    split: Boolean(tx.split),
+    splitpaid: Boolean(tx.splitPaid),
+    joint: true,
+    joint_mode: 'full',
+    account: 'joint',
+    joint_group_id: jointGroupId,
+  }
+
+  const myRow = {
+    ...base,
+    id: String(tx.id).replace(/__u[12]$/, ''),
+    userid: currentUser.id,
+    created_by_user_id: currentUser.id,
+    shared_with_user_id: partnerId,
+  }
+
+  const partnerRow = {
+    ...base,
+    id: `${String(tx.id).replace(/__u[12]$/, '')}__u${partnerId}`,
+    userid: partnerId,
+    created_by_user_id: currentUser.id,
+    shared_with_user_id: currentUser.id,
+  }
+
+  const { error } = await supabase
+    .from('transactions')
+    .upsert([myRow, partnerRow], { onConflict: 'id' })
+
+  return error
+}
+
+async function unsyncJointTransaction(tx, currentUser) {
+  if (!currentUser?.id) return null
+
+  const partnerId = getPartnerUserId(currentUser)
+  const jointGroupId = tx.jointGroupId || makeJointGroupId(tx)
+
+  const myBaseId = String(tx.id).replace(/__u[12]$/, '')
+  const partnerRowId = `${myBaseId}__u${partnerId}`
+
+  const { error: partnerDeleteError } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', partnerRowId)
+
+  if (partnerDeleteError) return partnerDeleteError
+
+  const { error: myUpdateError } = await supabase
+    .from('transactions')
+    .update({
+      joint: false,
+      joint_mode: null,
+      account: 'personal',
+      joint_group_id: null,
+      created_by_user_id: null,
+      shared_with_user_id: null,
+    })
+    .eq('id', tx.id)
+
+  return myUpdateError
+}
+
   async function signOutUser() {
   await clearIDB()
   setUser(null)
@@ -636,6 +743,9 @@ async function loadPartnerData(currentUser) {
   joint: Boolean(t.joint),
   jointMode: null,
   account: t.account || 'personal',
+  jointGroupId: t.joint_group_id || null,
+  createdByUserId: t.created_by_user_id || null,
+  sharedWithUserId: t.shared_with_user_id || null,
 }))
 
     const normalized = dedup(normalizeTransactions(mapped))
@@ -656,7 +766,12 @@ async function addTransactionToCloud(tx, currentUser) {
       split: tx.split,
       splitpaid: tx.splitPaid,
       joint: tx.joint,
-      account: tx.account,
+      joint_mode: tx.jointMode || null,
+      account: tx.account || 'personal',
+      joint_group_id: tx.jointGroupId || null,
+      created_by_user_id: tx.createdByUserId || null,
+      shared_with_user_id: tx.sharedWithUserId || null,
+      splitpaid: tx.splitPaid,
     },
     { onConflict: 'userid,id' }
   )
@@ -676,7 +791,12 @@ async function updateTransactionInCloud(tx, currentUser) {
       split: tx.split,
       splitpaid: tx.splitPaid,
       joint: tx.joint,
-      account: tx.account,
+      joint_mode: tx.jointMode || null,
+      account: tx.account || 'personal',
+      joint_group_id: tx.jointGroupId || null,
+      created_by_user_id: tx.createdByUserId || null,
+      shared_with_user_id: tx.sharedWithUserId || null,
+      splitpaid: tx.splitPaid,
     })
     .eq('userid', currentUser.id)
     .eq('id', tx.id)
@@ -706,7 +826,12 @@ async function updateTransactionInCloud(tx, currentUser) {
       split: tx.split,
       splitpaid: tx.splitPaid,
       joint: tx.joint,
-      account: tx.account,
+      joint_mode: tx.jointMode || null,
+      account: tx.account || 'personal',
+      joint_group_id: tx.jointGroupId || null,
+      created_by_user_id: tx.createdByUserId || null,
+      shared_with_user_id: tx.sharedWithUserId || null,
+      splitpaid: tx.splitPaid,
     })
     .eq('id', tx.id)
     .eq('userid', currentUser.id)
@@ -805,6 +930,36 @@ async function updateTransactionInCloud(tx, currentUser) {
       setStatus(`Error reading file: ${err.message}`)
     }
   }
+
+  async function handleJointToggle(tx) {
+  if (!user?.id) {
+    setStatus('Please log in first.')
+    return
+  }
+
+  const nextIsJoint = !tx.joint
+
+  if (nextIsJoint) {
+    const error = await syncJointTransaction(tx, user)
+    if (error) {
+      setStatus(`Failed to sync joint transaction: ${error.message}`)
+      return
+    }
+
+    setStatus('Joint transaction synced to both users.')
+    await loadTransactionsFromCloud(user)
+    return
+  }
+
+  const error = await unsyncJointTransaction(tx, user)
+  if (error) {
+    setStatus(`Failed to remove joint sync: ${error.message}`)
+    return
+  }
+
+  setStatus('Joint transaction removed from partner account.')
+  await loadTransactionsFromCloud(user)
+}
 
   async function handleJSONfile(file) {
     if (!file) return
@@ -2020,7 +2175,7 @@ async function deleteTransaction(id) {
                             <button
                               type="button"
                               className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
-                              onClick={() => toggleJoint(t.id)}
+                              onClick={() => handleJointToggle(t)}
                               disabled={t.account === 'joint'}
                               title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
                             >
