@@ -461,42 +461,53 @@ export function generateSplitPDFReport(transactions = []) {
   const totalAmount = splitRows.reduce((sum, row) => sum + row.totalAmount, 0)
   const totalOwed = splitRows.reduce((sum, row) => sum + row.owedAmount, 0)
 
-  addHeader(doc, 'Split Expenses Report', `Generated ${today}`)
+  addHeader(doc, 'Split PDF Report', `Generated ${today}`)
 
-  let y = 30
+  let y = 32
+
   doc.setTextColor(...DARK)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(13)
-  doc.text('Open split transactions', PAGE.mx, y)
-  y += 6
+  doc.setFontSize(14)
+  doc.text('Split expenses only', PAGE.mx, y)
+  y += 7
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(...MUTED)
   doc.text(
-    'This report includes all transactions currently marked as Split, with the full expense amount and the 50% owed amount.',
+    'This document includes only the transactions currently marked as Split. Each row shows the full transaction amount and the owed 50% share.',
     PAGE.mx,
     y,
     { maxWidth: PAGE.w - PAGE.mx * 2 }
   )
-  y += 10
+  y += 12
 
-  y = addInsightBox(
-    doc,
-    'Split summary',
-    [
-      `Transactions: ${splitRows.length}`,
-      `Total expense amount: ${fmtEUR(totalAmount)}`,
-      `Total owed amount: ${fmtEUR(totalOwed)}`,
-    ],
-    y,
-    TEAL_SOFT
-  )
+  doc.setFillColor(...LIGHT_2)
+  doc.setDrawColor(...BORDER)
+  doc.roundedRect(PAGE.mx, y, 58, 18, 2, 2, 'FD')
+  doc.roundedRect(PAGE.mx + 62, y, 58, 18, 2, 2, 'FD')
+  doc.roundedRect(PAGE.mx + 124, y, 58, 18, 2, 2, 'FD')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(...MUTED)
+  doc.text('Transactions', PAGE.mx + 4, y + 6)
+  doc.text('Total amount', PAGE.mx + 66, y + 6)
+  doc.text('Owed amount', PAGE.mx + 128, y + 6)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(...DARK)
+  doc.text(String(splitRows.length), PAGE.mx + 4, y + 14)
+  doc.text(fmtEUR(totalAmount), PAGE.mx + 66, y + 14)
+  doc.text(fmtEUR(totalOwed), PAGE.mx + 128, y + 14)
+
+  y += 26
 
   y = addTable(
     doc,
-    'Split transaction details',
-    [['Date', 'Description', 'Category', 'Total Amount', 'Owed Amount']],
+    'Split transaction detail',
+    [['Date', 'Description', 'Category', 'Total', 'Owed']],
     splitRows.length
       ? [
           ...splitRows.map((row) => [
@@ -511,16 +522,24 @@ export function generateSplitPDFReport(transactions = []) {
       : [['—', 'No split transactions found', '—', '—', '—']],
     y,
     {
-      styles: { fontSize: 8 },
+      styles: { fontSize: 8, cellPadding: 2.4 },
+      headStyles: { fillColor: [38, 70, 83], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 247, 244] },
       columnStyles: {
         0: { cellWidth: 24 },
-        1: { cellWidth: 72 },
-        2: { cellWidth: 34 },
-        3: { halign: 'right', cellWidth: 28 },
-        4: { halign: 'right', cellWidth: 28 },
+        1: { cellWidth: 78 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 24, halign: 'right' },
+        4: { cellWidth: 24, halign: 'right' },
+      },
+      didParseCell: function (data) {
+        if (data.section === 'body' && data.row.index === splitRows.length && splitRows.length) {
+          data.cell.styles.fontStyle = 'bold'
+          data.cell.styles.fillColor = [233, 196, 106]
+        }
       },
     }
   )
 
-  doc.save(`split-expenses-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+  doc.save(`split-pdf-report-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
