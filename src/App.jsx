@@ -2231,8 +2231,6 @@ async function deleteTransaction(id) {
                               type="button"
                               className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
                               onClick={() => handleJointToggle(t)}
-                              disabled={t.account === 'joint'}
-                              title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
                             >
                               {t.joint || t.account === 'joint' ? 'Yes' : 'No'}
                             </button>
