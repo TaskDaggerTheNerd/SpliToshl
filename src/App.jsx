@@ -832,7 +832,15 @@ async function updateTransactionInCloud(tx, currentUser) {
   }
 
   function handleSplitPDF() {
-  generateSplitPDFReport(transactions)
+  generateSplitPDFReport({
+    currentUserName: user?.displayName || user?.username || 'You',
+    partnerUserName: partnerUser?.displayName || partnerUser?.username || 'Partner',
+    mySplitTransactions: splitRows,
+    partnerSplitTransactions: partnerUser ? partnerSplitRows : [],
+    mySplitTotal: splitTotal,
+    partnerSplitTotal: partnerUser ? partnerSplitTotal : 0,
+    netBalance: partnerUser ? splitTotal - partnerSplitTotal : splitTotal,
+  })
   setStatus('Split PDF downloaded.')
 }
 
