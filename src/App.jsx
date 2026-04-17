@@ -793,30 +793,32 @@ async function unsyncJointTransaction(tx, currentUser) {
   }
 
 async function addTransactionToCloud(tx, currentUser) {
-  const { error } = await supabase.from('transactions').upsert(
-    {
-      id: tx.id,
-      userid: currentUser.id,
-      date: tx.date,
-      description: tx.description,
-      merchant: tx.merchant,
-      amount: tx.amount,
-      category: tx.category,
-      split: tx.split,
-      splitpaid: tx.splitPaid,
-      joint: tx.joint,
-      joint_mode: tx.jointMode || null,
-      account: tx.account || 'personal',
-      joint_group_id: tx.jointGroupId || null,
-      created_by_user_id: tx.createdByUserId || null,
-      shared_with_user_id: tx.sharedWithUserId || null,
-      splitpaid: tx.splitPaid,
-    },
-    { onConflict: 'userid,id' }
-  )
+  const { data, error } = await supabase
+    .from('transactions')
+    .upsert(
+      {
+        id: tx.id,
+        userid: currentUser.id,
+        date: tx.date,
+        description: tx.description,
+        merchant: tx.merchant,
+        amount: tx.amount,
+        category: tx.category,
+        split: tx.split,
+        splitpaid: tx.splitPaid,
+        joint: tx.joint,
+        joint_mode: tx.jointMode || null,
+        account: tx.account || 'personal',
+        joint_group_id: tx.jointGroupId || null,
+        created_by_user_id: tx.createdByUserId || null,
+        shared_with_user_id: tx.sharedWithUserId || null,
+      },
+      { onConflict: 'userid,id' }
+    )
+    .select()
 
   return { data, error }
-}  
+}
 
 async function updateTransactionInCloud(tx, currentUser) {
   const { error } = await supabase
@@ -911,23 +913,20 @@ async function updateTransactionInCloud(tx, currentUser) {
   }
 
   if (user) {
-    const payload = enriched.map((t) => ({
-      id: t.id,
-      userid: user.id,
-      date: t.date,
-      description: t.description,
-      merchant: t.merchant || t.description,
-      amount: Number(t.amount || 0),
-      category: t.category || 'Other',
-      split: Boolean(t.split),
-      splitpaid: Boolean(t.splitPaid),
-      joint: Boolean(t.joint),
-      account: t.account || 'personal',
-    }))
+  for (const t of enriched) {
+    const shouldBeJoint = Boolean(t.joint || t.account === 'joint')
 
-    const { error } = await supabase.from('transactions').upsert(payload, {
-      onConflict: 'userid,id',
-    })
+    const baseTx = {
+      ...t,
+      joint: false,
+      jointMode: null,
+      account: 'personal',
+      jointGroupId: null,
+      createdByUserId: null,
+      sharedWithUserId: null,
+    }
+
+    const { data, error } = await addTransactionToCloud(baseTx, user)
 
     if (error) {
       setStatus(`Imported locally, but cloud save failed: ${error.message}`)
@@ -937,7 +936,23 @@ async function updateTransactionInCloud(tx, currentUser) {
       setPendingImport(null)
       return
     }
+
+    let savedTx = {
+      ...baseTx,
+      ...data?.[0],
+      splitPaid: Boolean(data?.[0]?.splitpaid),
+      jointGroupId: data?.[0]?.joint_group_id || null,
+      createdByUserId: data?.[0]?.created_by_user_id || null,
+      sharedWithUserId: data?.[0]?.shared_with_user_id || null,
+      jointMode: data?.[0]?.joint_mode || null,
+      account: data?.[0]?.account || 'personal',
+    }
+
+    if (shouldBeJoint) {
+      await handleJointToggle(savedTx)
+    }
   }
+}
 
   setTransactions(merged)
   setEditingId(null)
@@ -1226,39 +1241,59 @@ async function handleClearAll() {
       category: manualDraft.category || 'Other',
       split: Boolean(manualDraft.split),
       splitPaid: false,
-      joint: Boolean(manualDraft.joint),
-      jointMode: manualDraft.joint ? 'full' : null,
-      account: manualDraft.joint ? 'joint' : 'personal',
+      joint: false,
+      jointMode: null,
+      account: 'personal',
     }
 
-    let savedTransaction = newTransaction
+let savedTransaction = newTransaction
 
 if (user) {
-  const result = await addTransactionToCloud(newTransaction, user)
-  if (result?.error) {
-    setStatus(`Cloud save failed: ${result.error.message}`)
+  const { data, error } = await addTransactionToCloud(newTransaction, user)
+  if (error) {
+    setStatus(`Cloud save failed: ${error.message}`)
     return
   }
-  if (result?.data?.[0]) {
-    savedTransaction = result.data[0]
+
+  if (data?.[0]) {
+    savedTransaction = {
+      ...newTransaction,
+      ...data[0],
+      splitPaid: Boolean(data[0].splitpaid),
+      jointGroupId: data[0].joint_group_id || null,
+      createdByUserId: data[0].created_by_user_id || null,
+      sharedWithUserId: data[0].shared_with_user_id || null,
+      jointMode: data[0].joint_mode || null,
+      account: data[0].account || 'personal',
+    }
   }
-}
 
-if (savedTransaction.joint) {
-  await handleJointToggle({
-    ...savedTransaction,
-    jointGroupId: savedTransaction.joint_group_id || null,
-    splitPaid: Boolean(savedTransaction.splitpaid),
-    account: savedTransaction.account || 'personal',
-  })
-}
+  if (manualDraft.joint) {
+    savedTransaction = {
+      ...savedTransaction,
+      joint: false,
+      jointMode: null,
+      account: 'personal',
+      jointGroupId: null,
+      createdByUserId: null,
+      sharedWithUserId: null,
+    }
 
-    setTransactions((prev) => dedup([...prev, newTransaction]))
+    await handleJointToggle(savedTransaction)
     setShowAddModal(false)
     setEditingId(null)
-    setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+    setStatus('Manual expense added and synced to both users.')
     setActiveTab('Transactions')
+    return
   }
+}
+
+setTransactions((prev) => dedup([...prev, savedTransaction]))
+setShowAddModal(false)
+setEditingId(null)
+setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+setActiveTab('Transactions')
+}
 
 async function clearTransactionsFromCloud(currentUser) {
   if (!currentUser?.id) return null
