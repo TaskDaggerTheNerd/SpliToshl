@@ -977,92 +977,6 @@ async function handleJointToggle(tx) {
       return
     }
 
-    if (nextIsJoint) {
-  const myUpdatePayload = {
-    joint: true,
-    joint_mode: 'full',
-    account: 'joint',
-    joint_group_id: jointGroupId,
-    created_by_user_id: user.id,
-    shared_with_user_id: partnerId,
-  }
-
-  const { error: updateMineError } = await supabase
-    .from('transactions')
-    .update(myUpdatePayload)
-    .eq('id', tx.id)
-
-  if (updateMineError) {
-    console.error('updateMineError', updateMineError)
-    setStatus(`Failed to update your row: ${updateMineError.message}`)
-    return
-  }
-
-  const partnerRow = {
-  id: `${baseId}__u${partnerId}`,
-  userid: partnerId,
-  date: tx.date,
-  description: tx.description,
-  merchant: tx.merchant || tx.description,
-  amount: Number(tx.amount) || 0,
-  category: tx.category || 'Other',
-  split: Boolean(tx.split),
-  splitpaid: Boolean(tx.splitPaid),
-  joint: true,
-  joint_mode: 'full',
-  account: 'joint',
-  joint_group_id: jointGroupId,
-  created_by_user_id: user.id,
-  shared_with_user_id: user.id,
-}
-
-console.log('Attempting partner insert:', partnerRow)
-
-const { error: partnerInsertError, data: partnerInsertData } = await supabase
-  .from('transactions')
-  .insert([partnerRow])
-  .select()
-
-console.log('partnerInsertData:', partnerInsertData)
-
-if (partnerInsertError) {
-  console.error('partnerInsertError:', partnerInsertError)
-
-  const { error: partnerUpdateError, data: partnerUpdateData } = await supabase
-    .from('transactions')
-    .update({
-      date: tx.date,
-      description: tx.description,
-      merchant: tx.merchant || tx.description,
-      amount: Number(tx.amount) || 0,
-      category: tx.category || 'Other',
-      split: Boolean(tx.split),
-      splitpaid: Boolean(tx.splitPaid),
-      joint: true,
-      joint_mode: 'full',
-      account: 'joint',
-      joint_group_id: jointGroupId,
-      created_by_user_id: user.id,
-      shared_with_user_id: user.id,
-    })
-    .eq('id', `${baseId}__u${partnerId}`)
-    .eq('userid', partnerId)
-    .select()
-
-  console.log('partnerUpdateData:', partnerUpdateData)
-
-  if (partnerUpdateError) {
-    console.error('partnerUpdateError:', partnerUpdateError)
-    setStatus(`Failed to create/update partner row: ${partnerUpdateError.message}`)
-    return
-  }
-}
-
-setStatus('Joint transaction synced to both users.')
-await loadTransactionsFromCloud(user)
-return
-}
-
     const partnerId = user.id === 1 ? 2 : 1
     const baseId = String(tx.id)
     const nextIsJoint = !(tx.joint || tx.account === 'joint')
@@ -1086,13 +1000,15 @@ return
         .eq('id', tx.id)
 
       if (updateMineError) {
-        console.error(updateMineError)
+        console.error('updateMineError:', updateMineError)
         setStatus(`Failed to update your row: ${updateMineError.message}`)
         return
       }
 
+      const partnerRowId = `${baseId}__u${partnerId}`
+
       const partnerRow = {
-        id: `${baseId}__u${partnerId}`,
+        id: partnerRowId,
         userid: partnerId,
         date: tx.date,
         description: tx.description,
@@ -1109,16 +1025,46 @@ return
         shared_with_user_id: user.id,
       }
 
-      console.log('Upserting partner row:', partnerRow)
+      console.log('Attempting partner insert:', partnerRow)
 
-      const { error: partnerUpsertError } = await supabase
+      const { error: partnerInsertError, data: partnerInsertData } = await supabase
         .from('transactions')
-        .upsert(partnerRow, { onConflict: 'id' })
+        .insert([partnerRow])
+        .select()
 
-      if (partnerUpsertError) {
-        console.error(partnerUpsertError)
-        setStatus(`Failed to sync partner row: ${partnerUpsertError.message}`)
-        return
+      console.log('partnerInsertData:', partnerInsertData)
+
+      if (partnerInsertError) {
+        console.error('partnerInsertError:', partnerInsertError)
+
+        const { error: partnerUpdateError, data: partnerUpdateData } = await supabase
+          .from('transactions')
+          .update({
+            date: tx.date,
+            description: tx.description,
+            merchant: tx.merchant || tx.description,
+            amount: Number(tx.amount) || 0,
+            category: tx.category || 'Other',
+            split: Boolean(tx.split),
+            splitpaid: Boolean(tx.splitPaid),
+            joint: true,
+            joint_mode: 'full',
+            account: 'joint',
+            joint_group_id: jointGroupId,
+            created_by_user_id: user.id,
+            shared_with_user_id: user.id,
+          })
+          .eq('id', partnerRowId)
+          .eq('userid', partnerId)
+          .select()
+
+        console.log('partnerUpdateData:', partnerUpdateData)
+
+        if (partnerUpdateError) {
+          console.error('partnerUpdateError:', partnerUpdateError)
+          setStatus(`Failed to create/update partner row: ${partnerUpdateError.message}`)
+          return
+        }
       }
 
       setStatus('Joint transaction synced to both users.')
@@ -1134,7 +1080,7 @@ return
       .eq('id', partnerRowId)
 
     if (deletePartnerError) {
-      console.error(deletePartnerError)
+      console.error('deletePartnerError:', deletePartnerError)
       setStatus(`Failed to remove partner row: ${deletePartnerError.message}`)
       return
     }
@@ -1156,7 +1102,7 @@ return
       .eq('id', tx.id)
 
     if (resetMineError) {
-      console.error(resetMineError)
+      console.error('resetMineError:', resetMineError)
       setStatus(`Failed to reset your row: ${resetMineError.message}`)
       return
     }
