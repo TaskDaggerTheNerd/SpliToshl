@@ -1016,30 +1016,6 @@ async function handleJointToggle(tx) {
   await loadTransactionsFromCloud(user)
 }
 
-  const nextIsJoint = !tx.joint
-
-  if (nextIsJoint) {
-    const error = await syncJointTransaction(tx, user)
-    if (error) {
-      setStatus(`Failed to sync joint transaction: ${error.message}`)
-      return
-    }
-
-    setStatus('Joint transaction synced to both users.')
-    await loadTransactionsFromCloud(user)
-    return
-  }
-
-  const error = await unsyncJointTransaction(tx, user)
-  if (error) {
-    setStatus(`Failed to remove joint sync: ${error.message}`)
-    return
-  }
-
-  setStatus('Joint transaction removed from partner account.')
-  await loadTransactionsFromCloud(user)
-}
-
   async function handleJSONfile(file) {
     if (!file) return
 
