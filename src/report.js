@@ -443,15 +443,17 @@ export function generateSplitPDFReport({
   partnerUserName = 'Partner',
   mySplitTransactions = [],
   partnerSplitTransactions = [],
-  mySplitTotal = 0,
-  partnerSplitTotal = 0,
-  netBalance = 0,
+  myOpenSplitTotal = 0,
+  partnerOpenSplitTotal = 0,
+  netSplitBalance = 0,
+  splitBalanceLabel = 'Balance is settled',
+  splitBalanceValue = 0,
 } = {}) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const today = new Date().toLocaleDateString('pt-PT')
 
-  const normalizeRows = (rows = []) =>
-    rows
+  const toRows = (transactions = []) =>
+    transactions
       .map((t) => {
         const totalAmount = Math.abs(Number(t.amount) || 0)
         const owedAmount = totalAmount / 2
@@ -466,17 +468,14 @@ export function generateSplitPDFReport({
       })
       .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 
-  const myRows = normalizeRows(mySplitTransactions)
-  const partnerRows = normalizeRows(partnerSplitTransactions)
+  const myRows = toRows(mySplitTransactions)
+  const partnerRows = toRows(partnerSplitTransactions)
 
-  const balanceLabel =
-    netBalance > 0.004
-      ? `${partnerUserName} owes ${currentUserName}`
-      : netBalance < -0.004
-        ? `${currentUserName} owes ${partnerUserName}`
-        : 'Balance is settled'
+  const myFullTotal = myRows.reduce((sum, row) => sum + row.totalAmount, 0)
+  const partnerFullTotal = partnerRows.reduce((sum, row) => sum + row.totalAmount, 0)
 
-  const balanceValue = Math.abs(Number(netBalance) || 0)
+  const myOwedTotal = myRows.reduce((sum, row) => sum + row.owedAmount, 0)
+  const partnerOwedTotal = partnerRows.reduce((sum, row) => sum + row.owedAmount, 0)
 
   addHeader(doc, 'Split Balance Report', `Generated ${today}`)
 
@@ -503,9 +502,9 @@ export function generateSplitPDFReport({
     doc,
     'Balance summary',
     [
-      `${currentUserName} split total: ${fmtEUR(mySplitTotal)}`,
-      `${partnerUserName} split total: ${fmtEUR(partnerSplitTotal)}`,
-      `${balanceLabel}: ${fmtEUR(balanceValue)}`,
+      `${currentUserName} split total owed amount: ${fmtEUR(myOwedTotal)}`,
+      `${partnerUserName} split total owed amount: ${fmtEUR(partnerOwedTotal)}`,
+      `${splitBalanceLabel}: ${fmtEUR(splitBalanceValue || Math.abs(netSplitBalance || 0))}`,
     ],
     y,
     TEAL_SOFT
@@ -524,7 +523,7 @@ export function generateSplitPDFReport({
             fmtEUR(row.totalAmount),
             fmtEUR(row.owedAmount),
           ]),
-          ['Total', '', '', '', fmtEUR(mySplitTotal)],
+          ['Total', '', '', fmtEUR(myFullTotal), fmtEUR(myOwedTotal)],
         ]
       : [['—', 'No split transactions found', '—', '—', '—']],
     y,
@@ -559,7 +558,7 @@ export function generateSplitPDFReport({
             fmtEUR(row.totalAmount),
             fmtEUR(row.owedAmount),
           ]),
-          ['Total', '', '', '', fmtEUR(partnerSplitTotal)],
+          ['Total', '', '', fmtEUR(partnerFullTotal), fmtEUR(partnerOwedTotal)],
         ]
       : [['—', 'No partner split transactions found', '—', '—', '—']],
     y,
@@ -575,14 +574,20 @@ export function generateSplitPDFReport({
     }
   )
 
+  if (y > 230) {
+    doc.addPage()
+    addHeader(doc, 'Split Balance Report', `Generated ${today}`)
+    y = 28
+  }
+
   y = addTable(
     doc,
     'Net balance',
     [['Item', 'Amount']],
     [
-      [`${currentUserName} total owed amount`, fmtEUR(mySplitTotal)],
-      [`${partnerUserName} total owed amount`, fmtEUR(partnerSplitTotal)],
-      [balanceLabel, fmtEUR(balanceValue)],
+      [`${currentUserName} total owed amount`, fmtEUR(myOwedTotal)],
+      [`${partnerUserName} total owed amount`, fmtEUR(partnerOwedTotal)],
+      [splitBalanceLabel, fmtEUR(splitBalanceValue || Math.abs(netSplitBalance || 0))],
     ],
     y,
     {
