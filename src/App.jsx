@@ -181,23 +181,36 @@ export default function App() {
     .channel(`transactions-live-${user.id}`)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'transactions' },
-      () => {
-        loadTransactionsFromCloud(user)
+      { event: 'INSERT', schema: 'public', table: 'transactions' },
+      async (payload) => {
+        console.log('INSERT event', payload)
+        await loadTransactionsFromCloud(user)
       }
     )
-    .subscribe()
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'transactions' },
+      async (payload) => {
+        console.log('UPDATE event', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'transactions' },
+      async (payload) => {
+        console.log('DELETE event', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .subscribe((status) => {
+      console.log('Realtime subscription status:', status)
+    })
 
   return () => {
     supabase.removeChannel(channel)
   }
 }, [user])
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 640)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
 
   useEffect(() => {
   setTransactions([])
