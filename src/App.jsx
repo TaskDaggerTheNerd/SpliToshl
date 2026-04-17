@@ -846,25 +846,31 @@ async function updateTransactionInCloud(tx, currentUser) {
   setStatus('Split PDF downloaded.')
 }
 
-  function handleClear() {
-    if (!transactions.length) {
-      setStatus('There is no data to clear.')
-      return
-    }
-
-    const ok = window.confirm(
-      'This will remove all imported transactions from this browser. Are you sure you want to clear everything?'
-    )
-
-    if (!ok) {
-      setStatus('Clear cancelled.')
-      return
-    }
-
+async function handleClearAll() {
+  if (!user) {
     setTransactions([])
-    setEditingId(null)
-    setStatus('All data cleared.')
+    await clearIDB()
+    setStatus('Local data cleared.')
+    return
   }
+
+  const confirmed = window.confirm(
+    'This will permanently delete all your transactions from this account, both locally and online. Continue?'
+  )
+
+  if (!confirmed) return
+
+  const error = await clearTransactionsFromCloud(user)
+
+  if (error) {
+    setStatus(`Failed to clear online data: ${error.message}`)
+    return
+  }
+
+  setTransactions([])
+  await clearIDB()
+  setStatus('All transactions cleared locally and online.')
+}
 
   function openManualAdd() {
     setManualDraft({
@@ -930,6 +936,17 @@ async function updateTransactionInCloud(tx, currentUser) {
     setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
     setActiveTab('Transactions')
   }
+
+async function clearTransactionsFromCloud(currentUser) {
+  if (!currentUser?.id) return null
+
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('userid', currentUser.id)
+
+  return error
+}
 
   async function markAllSplitsPaid() {
   const openSplitIds = transactions
