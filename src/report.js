@@ -447,6 +447,7 @@ export function generateSplitPDFReport(transactions = []) {
     .map((t) => {
       const totalAmount = Math.abs(Number(t.amount) || 0)
       const owedAmount = totalAmount / 2
+
       return {
         date: t.date || '—',
         description: t.description || t.merchant || '—',
@@ -486,7 +487,7 @@ export function generateSplitPDFReport(transactions = []) {
     [
       `Transactions: ${splitRows.length}`,
       `Total expense amount: ${fmtEUR(totalAmount)}`,
-      `Total owed to you: ${fmtEUR(totalOwed)}`,
+      `Total owed amount: ${fmtEUR(totalOwed)}`,
     ],
     y,
     TEAL_SOFT

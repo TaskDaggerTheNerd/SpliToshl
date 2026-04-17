@@ -2013,17 +2013,26 @@ async function deleteTransaction(id) {
         ) : (
           <>
             <div className="panel">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-<h2>Split Balance</h2>
-<div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-  {partnerUser && (
-    <span className="muted" style={{ fontSize: '0.82rem' }}>
-      vs {partnerUser.displayName}
-    </span>
-  )}
-  <button type="button" className="btn btn-small" onClick={handleSplitPDF}>Split PDF</button>
-  <button type="button" className="btn btn-small btn-primary" onClick={markAllSplitsPaid}>Paid</button>
-</div>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+  <h2>Monthly Split Balance</h2>
+
+  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+    <button
+      type="button"
+      className="btn btn-small"
+      onClick={handleSplitPDF}
+    >
+      Split PDF
+    </button>
+
+    <button
+      type="button"
+      className="btn btn-small btn-primary"
+      onClick={markAllSplitsPaid}
+    >
+      Paid
+    </button>
+  </div>
 </div>
               <p className="subtle-note">50% of each split transaction is counted as owed to you.</p>
               {partnerUser && (
