@@ -115,6 +115,12 @@ function getMonthKey(dateStr) {
   return d.length >= 7 ? d.slice(0, 7) : ''
 }
 
+function makeJointGroupId(tx) {
+  if (tx?.jointGroupId) return tx.jointGroupId
+  if (tx?.id) return `joint_${tx.id}`
+  return `joint_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
 export default function App() {
   const [transactions, setTransactions] = useState([])
   const [activeTab, setActiveTab] = useState('Own')
@@ -179,6 +185,25 @@ export default function App() {
 
 useEffect(() => {
   if (user) loadPartnerData(user)
+}, [user])
+
+useEffect(() => {
+  if (!user?.id) return
+
+  const channel = supabase
+    .channel(`transactions-sync-${user.id}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'transactions' },
+      () => {
+        loadTransactionsFromCloud(user)
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }, [user])
 
   const myTransactions = useMemo(() => {
@@ -634,8 +659,9 @@ async function loadPartnerData(currentUser) {
   split: Boolean(t.split),
   splitPaid: Boolean(t.splitpaid),
   joint: Boolean(t.joint),
-  jointMode: null,
+  jointMode: t.joint_mode || null,
   account: t.account || 'personal',
+  jointGroupId: t.joint_group_id || null,
 }))
 
     const normalized = dedup(normalizeTransactions(mapped))
@@ -644,42 +670,97 @@ async function loadPartnerData(currentUser) {
   }
 
 async function addTransactionToCloud(tx, currentUser) {
-  const { error } = await supabase.from('transactions').upsert(
-    {
-      id: tx.id,
-      userid: currentUser.id,
-      date: tx.date,
-      description: tx.description,
-      merchant: tx.merchant,
-      amount: tx.amount,
-      category: tx.category,
-      split: tx.split,
-      splitpaid: tx.splitPaid,
-      joint: tx.joint,
-      account: tx.account,
-    },
-    { onConflict: 'userid,id' }
-  )
+  const error = await supabase.from('transactions').upsert({
+  id: tx.id,
+  userid: currentUser.id,
+  date: tx.date,
+  description: tx.description,
+  merchant: tx.merchant,
+  amount: tx.amount,
+  category: tx.category,
+  split: tx.split,
+  splitpaid: tx.splitPaid,
+  split_paid: tx.splitPaid,
+  joint: tx.joint,
+  joint_mode: tx.jointMode,
+  joint_group_id: tx.jointGroupId || null,
+  account: tx.account,
+}, { onConflict: 'userid,id' })
 
   return error
 }
 
 async function updateTransactionInCloud(tx, currentUser) {
+  const error = await supabase
+  .from('transactions')
+  .update({
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant,
+    amount: tx.amount,
+    category: tx.category,
+    split: tx.split,
+    splitpaid: tx.splitPaid,
+    split_paid: tx.splitPaid,
+    joint: tx.joint,
+    joint_mode: tx.jointMode,
+    joint_group_id: tx.jointGroupId || null,
+    account: tx.account,
+  })
+  .eq('userid', currentUser.id)
+  .eq('id', tx.id)
+
+  return error
+}
+
+async function syncJointPair(tx, currentUser, partner) {
+  if (!currentUser?.id || !partner?.id) return null
+
+  const jointGroupId = makeJointGroupId(tx)
+
+  const base = {
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant || tx.description,
+    amount: Number(tx.amount) || 0,
+    category: tx.category || 'Other',
+    split: Boolean(tx.split),
+    splitpaid: Boolean(tx.splitPaid),
+    split_paid: Boolean(tx.splitPaid),
+    joint: true,
+    joint_mode: 'full',
+    account: 'joint',
+    joint_group_id: jointGroupId,
+  }
+
+  const myRow = {
+    ...base,
+    id: tx.id,
+    userid: currentUser.id,
+  }
+
+  const partnerRow = {
+    ...base,
+    id: String(tx.id).includes('__u2') || String(tx.id).includes('__u1')
+      ? String(tx.id).replace(/__u[12]$/, currentUser.id === 1 ? '__u2' : '__u1')
+      : `${tx.id}__u${partner.id}`,
+    userid: partner.id,
+  }
+
   const { error } = await supabase
     .from('transactions')
-    .update({
-      date: tx.date,
-      description: tx.description,
-      merchant: tx.merchant,
-      amount: tx.amount,
-      category: tx.category,
-      split: tx.split,
-      splitpaid: tx.splitPaid,
-      joint: tx.joint,
-      account: tx.account,
-    })
-    .eq('userid', currentUser.id)
-    .eq('id', tx.id)
+    .upsert([myRow, partnerRow], { onConflict: 'userid,id' })
+
+  return error
+}
+
+async function removeJointPair(tx) {
+  if (!tx?.jointGroupId) return null
+
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('joint_group_id', tx.jointGroupId)
 
   return error
 }
@@ -851,7 +932,51 @@ async function updateTransactionInCloud(tx, currentUser) {
       setStatus('There is no data to clear.')
       return
     }
+    
+    async function handleJointToggle(tx) {
+  if (!user) {
+    setStatus('Sign in first.')
+    return
+  }
 
+  if (!partnerUser?.id) {
+    setStatus('Partner account not found.')
+    return
+  }
+
+  const nextJoint = !tx.joint
+  const jointGroupId = tx.jointGroupId || makeJointGroupId(tx)
+
+  if (nextJoint) {
+    const nextTx = {
+      ...tx,
+      joint: true,
+      account: 'joint',
+      jointMode: 'full',
+      jointGroupId,
+    }
+
+    const error = await syncJointPair(nextTx, user, partnerUser)
+    if (error) {
+      setStatus(`Failed to sync joint transaction: ${error.message}`)
+      return
+    }
+
+    setStatus('Joint transaction synced to both users.')
+    await loadTransactionsFromCloud(user)
+    return
+  }
+
+  const error = await removeJointPair({ ...tx, jointGroupId })
+  if (error) {
+    setStatus(`Failed to remove joint transaction: ${error.message}`)
+    return
+  }
+
+  setStatus('Joint transaction removed from both users.')
+  await loadTransactionsFromCloud(user)
+}
+    
     const ok = window.confirm(
       'This will remove all imported transactions from this browser. Are you sure you want to clear everything?'
     )
@@ -1810,7 +1935,7 @@ async function deleteTransaction(id) {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th onClick={() => handleSort('date')}>
+                    <th onClick={() => handleJointToggle('date')}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                         <span>Date</span>
                         <input
@@ -1822,8 +1947,8 @@ async function deleteTransaction(id) {
                         />
                       </div>
                     </th>
-                    <th onClick={() => handleSort('description')}>Description</th>
-                    <th onClick={() => handleSort('category')}>
+                    <th onClick={() => handleJointToggle('description')}>Description</th>
+                    <th onClick={() => handleJointToggle('category')}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                         <span>Category</span>
                         <select
@@ -1841,7 +1966,7 @@ async function deleteTransaction(id) {
                         </select>
                       </div>
                     </th>
-                    <th onClick={() => handleSort('amount')}>Amount</th>
+                    <th onClick={() => handleJointToggle('amount')}>Amount</th>
                     <th>Split</th>
                     <th>Joint?</th>
                     <th>
