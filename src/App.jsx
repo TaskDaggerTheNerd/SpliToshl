@@ -815,8 +815,8 @@ async function addTransactionToCloud(tx, currentUser) {
     { onConflict: 'userid,id' }
   )
 
-  return error
-}
+  return { data, error }
+}  
 
 async function updateTransactionInCloud(tx, currentUser) {
   const { error } = await supabase
@@ -1231,13 +1231,27 @@ async function handleClearAll() {
       account: manualDraft.joint ? 'joint' : 'personal',
     }
 
-    if (user) {
-      const error = await addTransactionToCloud(newTransaction, user)
-      if (error) {
-        setStatus(`Cloud save failed: ${error.message}`)
-        return
-      }
-    }
+    let savedTransaction = newTransaction
+
+if (user) {
+  const result = await addTransactionToCloud(newTransaction, user)
+  if (result?.error) {
+    setStatus(`Cloud save failed: ${result.error.message}`)
+    return
+  }
+  if (result?.data?.[0]) {
+    savedTransaction = result.data[0]
+  }
+}
+
+if (savedTransaction.joint) {
+  await handleJointToggle({
+    ...savedTransaction,
+    jointGroupId: savedTransaction.joint_group_id || null,
+    splitPaid: Boolean(savedTransaction.splitpaid),
+    account: savedTransaction.account || 'personal',
+  })
+}
 
     setTransactions((prev) => dedup([...prev, newTransaction]))
     setShowAddModal(false)
