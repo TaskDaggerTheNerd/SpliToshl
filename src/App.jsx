@@ -931,11 +931,90 @@ async function updateTransactionInCloud(tx, currentUser) {
     }
   }
 
-  async function handleJointToggle(tx) {
+async function handleJointToggle(tx) {
   if (!user?.id) {
     setStatus('Please log in first.')
     return
   }
+
+  const partnerId = user.id === 1 ? 2 : 1
+  const baseId = String(tx.id).replace(/__u[12]$/, '')
+  const nextIsJoint = !(tx.joint || tx.account === 'joint')
+  const jointGroupId = tx.jointGroupId || `joint_${baseId}`
+
+  if (nextIsJoint) {
+    const myRow = {
+      id: baseId,
+      userid: user.id,
+      date: tx.date,
+      description: tx.description,
+      merchant: tx.merchant || tx.description,
+      amount: Number(tx.amount) || 0,
+      category: tx.category || 'Other',
+      split: Boolean(tx.split),
+      splitpaid: Boolean(tx.splitPaid),
+      joint: true,
+      joint_mode: 'full',
+      account: 'joint',
+      joint_group_id: jointGroupId,
+      created_by_user_id: user.id,
+      shared_with_user_id: partnerId,
+    }
+
+    const partnerRow = {
+      ...myRow,
+      id: `${baseId}__u${partnerId}`,
+      userid: partnerId,
+      created_by_user_id: user.id,
+      shared_with_user_id: user.id,
+    }
+
+    const { error } = await supabase
+      .from('transactions')
+      .upsert([myRow, partnerRow], { onConflict: 'id' })
+
+    if (error) {
+      setStatus(`Failed to sync joint transaction: ${error.message}`)
+      return
+    }
+
+    setStatus('Joint transaction synced to both users.')
+    await loadTransactionsFromCloud(user)
+    return
+  }
+
+  const partnerRowId = `${baseId}__u${partnerId}`
+
+  const { error: deletePartnerError } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', partnerRowId)
+
+  if (deletePartnerError) {
+    setStatus(`Failed to remove partner joint row: ${deletePartnerError.message}`)
+    return
+  }
+
+  const { error: updateMineError } = await supabase
+    .from('transactions')
+    .update({
+      joint: false,
+      joint_mode: null,
+      account: 'personal',
+      joint_group_id: null,
+      created_by_user_id: null,
+      shared_with_user_id: null,
+    })
+    .eq('id', tx.id)
+
+  if (updateMineError) {
+    setStatus(`Failed to update your row: ${updateMineError.message}`)
+    return
+  }
+
+  setStatus('Joint transaction removed from both users.')
+  await loadTransactionsFromCloud(user)
+}
 
   const nextIsJoint = !tx.joint
 
