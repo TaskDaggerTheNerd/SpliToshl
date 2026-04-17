@@ -948,6 +948,32 @@ async function clearTransactionsFromCloud(currentUser) {
   return error
 }
 
+async function handleClear() {
+  if (!user) {
+    setTransactions([])
+    await clearIDB()
+    setStatus('Local data cleared.')
+    return
+  }
+
+  const confirmed = window.confirm(
+    'This will permanently delete all your transactions from this account, both locally and online. Continue?'
+  )
+
+  if (!confirmed) return
+
+  const error = await clearTransactionsFromCloud(user)
+
+  if (error) {
+    setStatus(`Failed to clear online data: ${error.message}`)
+    return
+  }
+
+  setTransactions([])
+  await clearIDB()
+  setStatus('All transactions cleared locally and online.')
+}
+
   async function markAllSplitsPaid() {
   const openSplitIds = transactions
     .filter((t) => t.split)
@@ -1261,7 +1287,7 @@ async function deleteTransaction(id) {
             Download PDF
           </button>
 
-          <button type="button" className="btn btn-quiet" onClick={handleClear}>
+          <button type="button" className="btn btn-quiet" onClick={handleClearAll}>
             Clear
           </button>
 
