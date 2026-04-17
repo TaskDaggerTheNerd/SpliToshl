@@ -212,6 +212,32 @@ useEffect(() => {
   if (user) loadPartnerData(user)
 }, [user])
 
+useEffect(() => {
+  if (!user?.id) return
+
+  const channel = supabase
+    .channel(`transactions-realtime-${user.id}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+      },
+      async (payload) => {
+        console.log('Realtime change received:', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .subscribe((status) => {
+      console.log('Realtime status:', status)
+    })
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [user])
+
   const myTransactions = useMemo(() => {
     return transactions.map((t) => {
       const amount = Math.abs(Number(t.amount || 0))
