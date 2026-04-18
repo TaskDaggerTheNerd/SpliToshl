@@ -444,19 +444,35 @@ useEffect(() => {
 
   // My open split transactions (unpaid)
 const myOpenSplitTransactions = useMemo(
-  () => transactions.filter(t => t.split && !t.splitPaid),
+  () => transactions.filter((t) => t.split && !t.splitPaid),
   [transactions]
 )
 
-// Partner open split transactions (fetched from Supabase)
 const partnerOpenSplitTotal = useMemo(
-  () => partnerSplitTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0) / 2, 0),
+  () =>
+    partnerSplitTransactions.reduce((sum, t) => {
+      const half = Math.abs(Number(t.amount) || 0) / 2
+      if (t.splitDirection === 'owed_to_me') return sum + half
+      if (t.splitDirection === 'i_owe') return sum - half
+      return sum
+    }, 0),
   [partnerSplitTransactions]
 )
 
 const myOpenSplitTotal = useMemo(
-  () => myOpenSplitTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0) / 2, 0),
+  () =>
+    myOpenSplitTransactions.reduce((sum, t) => {
+      const half = Math.abs(Number(t.amount) || 0) / 2
+      if (t.splitDirection === 'owed_to_me') return sum + half
+      if (t.splitDirection === 'i_owe') return sum - half
+      return sum
+    }, 0),
   [myOpenSplitTransactions]
+)
+
+const netSplitBalance = useMemo(
+  () => myOpenSplitTotal - partnerOpenSplitTotal,
+  [myOpenSplitTotal, partnerOpenSplitTotal]
 )
 
 // Net: positive = partner owes you, negative = you owe partner
@@ -476,9 +492,13 @@ const splitBalanceValue = Math.abs(netSplitBalance)
 // Monthly rows: my side per month
 const splitRows = useMemo(() => {
   const m = new Map()
-  myOpenSplitTransactions.forEach(t => {
+  myOpenSplitTransactions.forEach((t) => {
     const month = String(t.date).slice(0, 7)
-    if (month.length === 7) m.set(month, (m.get(month) || 0) + Math.abs(Number(t.amount) || 0) / 2)
+    if (month.length !== 7) return
+    const half = Math.abs(Number(t.amount) || 0) / 2
+    const signedHalf =
+      t.splitDirection === 'owed_to_me' ? half : t.splitDirection === 'i_owe' ? -half : 0
+    m.set(month, (m.get(month) || 0) + signedHalf)
   })
   return [...m.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -632,17 +652,18 @@ async function loadPartnerData(currentUser) {
     .eq('splitpaid', false)
   if (txErr) { setPartnerSplitTransactions([]); return }
   setPartnerSplitTransactions(
-    (txData || []).map(t => ({
-      id: t.id,
-      date: t.date,
-      description: t.description,
-      merchant: t.merchant || t.description,
-      amount: Number(t.amount) || 0,
-      category: t.category || 'Other',
-      split: true,
-      splitPaid: false,
-    }))
-  )
+  (txData || []).map((t) => ({
+    id: t.id,
+    date: t.date,
+    description: t.description,
+    merchant: t.merchant || t.description,
+    amount: Number(t.amount) || 0,
+    category: t.category || 'Other',
+    split: true,
+    splitPaid: false,
+    splitDirection: t.split_direction || null,
+  }))
+)
 }
 
 async function syncJointTransaction(tx, currentUser) {
@@ -676,12 +697,23 @@ async function syncJointTransaction(tx, currentUser) {
   }
 
   const partnerRow = {
-    ...base,
-    id: `${String(tx.id).replace(/__u[12]$/, '')}__u${partnerId}`,
-    userid: partnerId,
-    created_by_user_id: currentUser.id,
-    shared_with_user_id: currentUser.id,
-  }
+  id: partnerRowId,
+  userid: partnerId,
+  date: tx.date,
+  description: tx.description,
+  merchant: tx.merchant || tx.description,
+  amount: Number(tx.amount) || 0,
+  category: tx.category || 'Other',
+  split: Boolean(tx.split),
+  splitpaid: Boolean(tx.splitPaid),
+  split_direction: tx.split ? 'i_owe' : null,
+  joint: true,
+  joint_mode: 'full',
+  account: 'joint',
+  joint_group_id: jointGroupId,
+  created_by_user_id: user.id,
+  shared_with_user_id: user.id,
+}
 
   const { error } = await supabase
     .from('transactions')
@@ -785,6 +817,7 @@ async function unsyncJointTransaction(tx, currentUser) {
   jointGroupId: t.joint_group_id || null,
   createdByUserId: t.created_by_user_id || null,
   sharedWithUserId: t.shared_with_user_id || null,
+  splitDirection: t.split_direction || null,
 }))
 
     const normalized = dedup(normalizeTransactions(mapped))
@@ -812,6 +845,7 @@ async function addTransactionToCloud(tx, currentUser) {
         joint_group_id: tx.jointGroupId || null,
         created_by_user_id: tx.createdByUserId || null,
         shared_with_user_id: tx.sharedWithUserId || null,
+        split_direction: tx.splitDirection || null,
       },
       { onConflict: 'userid,id' }
     )
@@ -838,6 +872,7 @@ async function updateTransactionInCloud(tx, currentUser) {
       created_by_user_id: tx.createdByUserId || null,
       shared_with_user_id: tx.sharedWithUserId || null,
       splitpaid: tx.splitPaid,
+      split_direction: tx.splitDirection || null,
     })
     .eq('userid', currentUser.id)
     .eq('id', tx.id)
@@ -851,31 +886,6 @@ async function deleteTransactionFromCloud(id, currentUser) {
     .delete()
     .eq('userid', currentUser.id)
     .eq('id', id)
-
-  return error
-}
-
-async function updateTransactionInCloud(tx, currentUser) {
-  const { error } = await supabase
-    .from('transactions')
-    .update({
-      date: tx.date,
-      description: tx.description,
-      merchant: tx.merchant,
-      amount: tx.amount,
-      category: tx.category,
-      split: tx.split,
-      splitpaid: tx.splitPaid,
-      joint: tx.joint,
-      joint_mode: tx.jointMode || null,
-      account: tx.account || 'personal',
-      joint_group_id: tx.jointGroupId || null,
-      created_by_user_id: tx.createdByUserId || null,
-      shared_with_user_id: tx.sharedWithUserId || null,
-      splitpaid: tx.splitPaid,
-    })
-    .eq('id', tx.id)
-    .eq('userid', currentUser.id)
 
   return error
 }
@@ -1068,6 +1078,7 @@ async function handleJointToggle(tx) {
             joint_group_id: jointGroupId,
             created_by_user_id: user.id,
             shared_with_user_id: user.id,
+            split_direction: tx.split ? 'i_owe' : null,
           })
           .eq('id', partnerRowId)
           .eq('userid', partnerId)
@@ -1240,6 +1251,7 @@ async function handleClearAll() {
       amount,
       category: manualDraft.category || 'Other',
       split: Boolean(manualDraft.split),
+      splitDirection: manualDraft.split ? 'owed_to_me' : null,
       splitPaid: false,
       joint: false,
       jointMode: null,
@@ -1379,9 +1391,10 @@ async function toggleSplit(id) {
   }
 
   const updatedTransaction = {
-    ...tx,
-    split: !tx.split,
-  }
+  ...tx,
+  split: !tx.split,
+  splitDirection: !tx.split ? 'owed_to_me' : null,
+}
 
   if (user) {
     const error = await updateTransactionInCloud(updatedTransaction, user)
