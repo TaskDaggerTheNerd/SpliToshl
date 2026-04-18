@@ -470,11 +470,6 @@ const myOpenSplitTotal = useMemo(
   [myOpenSplitTransactions]
 )
 
-const netSplitBalance = useMemo(
-  () => myOpenSplitTotal - partnerOpenSplitTotal,
-  [myOpenSplitTotal, partnerOpenSplitTotal]
-)
-
 // Net: positive = partner owes you, negative = you owe partner
 const netSplitBalance = useMemo(
   () => myOpenSplitTotal - partnerOpenSplitTotal,
