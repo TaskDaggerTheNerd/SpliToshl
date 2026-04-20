@@ -459,8 +459,8 @@ const myOpenSplitTotal = useMemo(
 
 // Net: positive = partner owes you, negative = you owe partner
 const netSplitBalance = useMemo(
-  () => myOpenSplitTotal - partnerOpenSplitTotal,
-  [myOpenSplitTotal, partnerOpenSplitTotal]
+  () => myOpenSplitTotal,
+  [myOpenSplitTotal]
 )
 
 const splitBalanceLabel = useMemo(() => {
@@ -1458,91 +1458,145 @@ async function toggleSplit(id) {
     return
   }
 
-  const isJointTx = tx.account === 'joint' || tx.joint
-
-  if (!isJointTx) {
+  if (!user?.id) {
     const updatedTransaction = {
       ...tx,
       split: !tx.split,
+      splitPaid: false,
       splitDirection: !tx.split ? 'owed_to_me' : null,
-      splitGroupId: !tx.split ? (tx.splitGroupId || `split_${tx.id}`) : null,
     }
 
-    if (user) {
-      const error = await updateTransactionInCloud(updatedTransaction, user)
-      if (error) {
-        setStatus(`Cloud save failed: ${error.message}`)
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === id ? updatedTransaction : t))
+    )
+
+    setStatus(
+      updatedTransaction.split
+        ? 'Split updated locally.'
+        : 'Split removed locally.'
+    )
+    return
+  }
+
+  try {
+    const partnerId = getPartnerUserId(user)
+
+    if (!partnerId) {
+      setStatus('Partner user not found.')
+      return
+    }
+
+    const isJoint = tx.joint || tx.account === 'joint'
+
+    if (isJoint) {
+      const splitGroupId = tx.splitGroupId || tx.jointGroupId || `split_${tx.id}`
+
+      if (!tx.split) {
+        const { data: paidRows, error: paidCheckError } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('joint_group_id', tx.jointGroupId)
+          .eq('splitpaid', true)
+          .limit(1)
+
+        if (paidCheckError) {
+          setStatus(`Split check failed: ${paidCheckError.message}`)
+          return
+        }
+
+        if (paidRows && paidRows.length > 0) {
+          setStatus('This joint transaction was already settled and cannot be split again.')
+          return
+        }
+
+        const { error: myError } = await supabase
+          .from('transactions')
+          .update({
+            split: true,
+            splitpaid: false,
+            split_group_id: splitGroupId,
+            split_direction: 'owed_to_me',
+          })
+          .eq('joint_group_id', tx.jointGroupId)
+          .eq('userid', user.id)
+
+        if (myError) {
+          setStatus(`Cloud save failed: ${myError.message}`)
+          return
+        }
+
+        const { error: partnerError } = await supabase
+          .from('transactions')
+          .update({
+            split: true,
+            splitpaid: false,
+            split_group_id: splitGroupId,
+            split_direction: 'i_owe',
+          })
+          .eq('joint_group_id', tx.jointGroupId)
+          .eq('userid', partnerId)
+
+        if (partnerError) {
+          setStatus(`Partner update failed: ${partnerError.message}`)
+          return
+        }
+
+        await loadTransactionsFromCloud(user)
+        await loadPartnerData(user)
+        setStatus('Split enabled for both users.')
         return
       }
-    }
 
-    setTransactions((prev) => prev.map((t) => (t.id === id ? updatedTransaction : t)))
-    setStatus(updatedTransaction.split ? 'Split updated and saved online.' : 'Split removed and saved online.')
-    return
-  }
+      const { error: unsplitError } = await supabase
+        .from('transactions')
+        .update({
+          split: false,
+          splitpaid: false,
+          split_group_id: null,
+          split_direction: null,
+        })
+        .eq('joint_group_id', tx.jointGroupId)
+        .eq('splitpaid', false)
 
-  if (!tx.jointGroupId) {
-    setStatus('This joint transaction is missing a joint group id.')
-    return
-  }
+      if (unsplitError) {
+        setStatus(`Cloud save failed: ${unsplitError.message}`)
+        return
+      }
 
-  if (!tx.split) {
-    const splitGroupId = tx.splitGroupId || tx.jointGroupId
-
-    const { data: paidRows, error: paidCheckError } = await supabase
-      .from('transactions')
-      .select('id')
-      .eq('split_group_id', splitGroupId)
-      .eq('splitpaid', true)
-      .limit(1)
-
-    if (paidCheckError) {
-      setStatus(`Split check failed: ${paidCheckError.message}`)
+      await loadTransactionsFromCloud(user)
+      await loadPartnerData(user)
+      setStatus('Split removed for both users.')
       return
     }
 
-    if (paidRows && paidRows.length > 0) {
-      setStatus('This joint transaction was already settled and cannot be split again.')
-      return
+    const updatedTransaction = {
+      ...tx,
+      split: !tx.split,
+      splitPaid: false,
+      splitGroupId: !tx.split ? (tx.splitGroupId || `split_${tx.id}`) : null,
+      splitDirection: !tx.split ? 'owed_to_me' : null,
     }
 
-    const { error } = await supabase
-      .from('transactions')
-      .update({
-        split: true,
-        splitpaid: false,
-        split_group_id: splitGroupId,
-      })
-      .eq('joint_group_id', tx.jointGroupId)
-
+    const error = await updateTransactionInCloud(updatedTransaction, user)
     if (error) {
       setStatus(`Cloud save failed: ${error.message}`)
       return
     }
 
-    await loadTransactionsFromCloud(user)
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === id ? updatedTransaction : t))
+    )
+
     await loadPartnerData(user)
-    setStatus('Split enabled for both users.')
-    return
+
+    setStatus(
+      updatedTransaction.split
+        ? 'Split updated and saved online.'
+        : 'Split removed and saved online.'
+    )
+  } catch (err) {
+    setStatus(`Split toggle failed: ${err.message}`)
   }
-
-  const { error } = await supabase
-    .from('transactions')
-    .update({
-      split: false,
-      split_group_id: null,
-    })
-    .eq('joint_group_id', tx.jointGroupId)
-    .eq('splitpaid', false)
-
-  if (error) {
-    setStatus(`Cloud save failed: ${error.message}`)
-    return
-  }
-
-  await loadTransactionsFromCloud(user)
-  await loadPartnerData(user)
-  setStatus('Split removed for both users.')
 }
 
 async function toggleJoint(id) {
