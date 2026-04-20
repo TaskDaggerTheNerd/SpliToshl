@@ -435,21 +435,10 @@ const myOpenSplitTransactions = useMemo(
   [transactions]
 )
 
-const partnerOpenSplitTotal = useMemo(
-  () =>
-    partnerSplitTransactions.reduce((sum, t) => {
-      const half = Math.abs(Number(t.amount) || 0) / 2
-      if (t.splitDirection === 'owed_to_me') return sum + half
-      if (t.splitDirection === 'i_owe') return sum - half
-      return sum
-    }, 0),
-  [partnerSplitTransactions]
-)
-
 const myOpenSplitTotal = useMemo(
   () =>
     myOpenSplitTransactions.reduce((sum, t) => {
-      const half = Math.abs(Number(t.amount) || 0) / 2
+      const half = Math.abs(Number(t.amount || 0)) / 2
       if (t.splitDirection === 'owed_to_me') return sum + half
       if (t.splitDirection === 'i_owe') return sum - half
       return sum
@@ -457,7 +446,17 @@ const myOpenSplitTotal = useMemo(
   [myOpenSplitTransactions]
 )
 
-// Net: positive = partner owes you, negative = you owe partner
+const partnerOpenSplitTotal = useMemo(
+  () =>
+    partnerSplitTransactions.reduce((sum, t) => {
+      const half = Math.abs(Number(t.amount || 0)) / 2
+      if (t.splitDirection === 'owed_to_me') return sum + half
+      if (t.splitDirection === 'i_owe') return sum - half
+      return sum
+    }, 0),
+  [partnerSplitTransactions]
+)
+
 const netSplitBalance = useMemo(
   () => myOpenSplitTotal,
   [myOpenSplitTotal]
