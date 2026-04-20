@@ -1347,41 +1347,33 @@ async function handleClearAll() {
     setTransactions((prev) => dedup([...prev, savedTransaction]))
 
     if (manualDraft.joint) {
-      try {
-        await handleJointToggle({
-          ...savedTransaction,
-          joint: false,
-          jointMode: null,
-          account: 'personal',
-        })
-
-        if (user) {
-          await loadTransactionsFromCloud(user)
-          await loadPartnerData(user)
-        }
-
-        setShowAddModal(false)
-        setEditingId(null)
-        setActiveTab('Transactions')
-        setStatus('Manual expense added and synced to both users.')
-        return
-      } catch (err) {
-        setShowAddModal(false)
-        setEditingId(null)
-        setActiveTab('Transactions')
-        setStatus(`Expense saved, but joint sync failed: ${err.message}`)
-        return
+      const jointReadyTransaction = {
+        ...savedTransaction,
+        joint: false,
+        jointMode: null,
+        account: 'personal',
       }
-    }
 
-    if (user) {
+      await handleJointToggle(jointReadyTransaction)
+
+      if (user) {
+        await loadTransactionsFromCloud(user)
+        await loadPartnerData(user)
+      }
+    } else if (user) {
       await loadPartnerData(user)
     }
 
     setShowAddModal(false)
     setEditingId(null)
     setActiveTab('Transactions')
-    setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+    setStatus(
+      manualDraft.joint
+        ? 'Manual expense added and synced to both users.'
+        : user
+          ? 'Manual expense added and saved online.'
+          : 'Manual expense added locally.'
+    )
   } catch (err) {
     setStatus(`Manual add failed: ${err.message}`)
   }
