@@ -751,15 +751,15 @@ async function loadPartnerData(currentUser) {
     .eq('splitpaid', false)
   if (txErr) { setPartnerSplitTransactions([]); return }
   setPartnerSplitTransactions(
-  (txData || []).map((t) => ({
+  txData.map((t) => ({
     id: t.id,
     date: t.date,
     description: t.description,
     merchant: t.merchant || t.description,
-    amount: Number(t.amount) || 0,
+    amount: Number(t.amount || 0),
     category: t.category || 'Other',
-    split: true,
-    splitPaid: false,
+    split: Boolean(t.split),
+    splitPaid: Boolean(t.splitpaid),
     splitDirection: t.split_direction || null,
   }))
 )
@@ -1445,40 +1445,61 @@ async function handleClear() {
 }
 
   async function markAllSplitsPaid() {
-  const openSplitIds = transactions
-    .filter((t) => t.split)
-    .map((t) => t.id)
+  if (!user) {
+    setStatus('You need to be signed in to mark splits as paid.')
+    return
+  }
 
-  if (openSplitIds.length === 0) {
+  const myOpenSplits = transactions.filter((t) => t.split && !t.splitPaid)
+
+  if (myOpenSplits.length === 0) {
     setStatus('No split transactions to mark as paid.')
     return
   }
 
-  if (user) {
-    const { error } = await supabase
+  const myIds = myOpenSplits.map((t) => t.id)
+
+  const partnerDescriptions = [...new Set(
+    myOpenSplits.map((t) => String(t.description || '').trim()).filter(Boolean)
+  )]
+
+  const { error: myError } = await supabase
+    .from('transactions')
+    .update({ split: false, splitpaid: true })
+    .in('id', myIds)
+    .eq('userid', user.id)
+
+  if (myError) {
+    setStatus(`Cloud save failed: ${myError.message}`)
+    return
+  }
+
+  if (partnerUser?.id && partnerDescriptions.length > 0) {
+    const { error: partnerError } = await supabase
       .from('transactions')
       .update({ split: false, splitpaid: true })
-      .in('id', openSplitIds)
-      .eq('userid', user.id)
+      .eq('userid', partnerUser.id)
+      .eq('split', true)
+      .in('description', partnerDescriptions)
 
-    if (error) {
-      setStatus(`Cloud save failed: ${error.message}`)
+    if (partnerError) {
+      setStatus(`Partner update failed: ${partnerError.message}`)
       return
     }
   }
 
-  let changed = 0
   setTransactions((prev) =>
-    prev.map((t) => {
-      if (t.split) {
-        changed += 1
-        return { ...t, split: false, splitPaid: true }
-      }
-      return t
-    })
+    prev.map((t) =>
+      myIds.includes(t.id)
+        ? { ...t, split: false, splitPaid: true }
+        : t
+    )
   )
 
-  setStatus(`Marked ${changed} split transactions as paid.`)
+  await loadTransactionsFromCloud(user)
+  await loadPartnerData(user)
+
+  setStatus(`Marked ${myOpenSplits.length} split transactions as paid for both users.`)
 }
 
 async function toggleSplit(id) {
