@@ -251,6 +251,46 @@ useEffect(() => {
   }
 }, [user])
 
+useEffect(() => {
+  const saved = localStorage.getItem('splitoshl_user')
+  if (!saved) return
+
+  try {
+    const parsed = JSON.parse(saved)
+    if (parsed?.id && parsed?.username) {
+      setUser(parsed)
+      loadTransactionsFromCloud(parsed)
+      loadPartnerData(parsed)
+    }
+  } catch {
+    localStorage.removeItem('splitoshl_user')
+  }
+}, [])
+
+useEffect(() => {
+  if (!user?.id) return
+
+  const channel = supabase
+    .channel(`transactions-${user.id}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+      },
+      () => {
+        loadTransactionsFromCloud(user)
+        loadPartnerData(user)
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [user])
+
   const myTransactions = useMemo(() => {
     return transactions.map((t) => {
       const amount = Math.abs(Number(t.amount || 0))
@@ -609,10 +649,11 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     partnerUsername: String(row.partner_username || '').trim().toLowerCase(),
   }
   setUser(appUser)
-  setLoginPassword('')
-  setStatus('Signed in as ' + appUser.displayName + '.')
-  await loadTransactionsFromCloud(appUser)
-  await loadPartnerData(appUser)
+localStorage.setItem('splitoshl_user', JSON.stringify(appUser))
+setLoginPassword('')
+setStatus('Signed in as ' + appUser.displayName + '.')
+await loadTransactionsFromCloud(appUser)
+await loadPartnerData(appUser)
 }
 
 async function loadPartnerData(currentUser) {
@@ -750,6 +791,7 @@ async function unsyncJointTransaction(tx, currentUser) {
 
   async function signOutUser() {
   await clearIDB()
+  localStorage.removeItem('splitoshl_user')
   setUser(null)
   setTransactions([])
   setLoginName('')
