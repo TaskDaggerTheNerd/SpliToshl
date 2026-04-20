@@ -117,13 +117,6 @@ function makeJointGroupId(tx) {
     .slice(0, 30)}_${tx.id || Date.now()}`
 }
 
-function makeSplitGroupId(tx) {
-  if (tx?.splitGroupId) return tx.splitGroupId
-  return `split_${tx.date || 'nodate'}_${(tx.description || 'expense')
-    .replace(/\s+/g, '-')
-    .slice(0, 30)}_${tx.id || Date.now()}`
-}
-
 function getPartnerUserId(currentUser) {
   if (!currentUser?.id) return null
   return currentUser.id === 1 ? 2 : 1
@@ -184,6 +177,43 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
+  useEffect(() => {
+  if (!user?.id) return
+
+  const channel = supabase
+    .channel(`transactions-live-${user.id}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'transactions' },
+      async (payload) => {
+        console.log('INSERT event', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'transactions' },
+      async (payload) => {
+        console.log('UPDATE event', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'transactions' },
+      async (payload) => {
+        console.log('DELETE event', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .subscribe((status) => {
+      console.log('Realtime subscription status:', status)
+    })
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [user])
 
   useEffect(() => {
   setTransactions([])
@@ -196,6 +226,32 @@ export default function App() {
 
 useEffect(() => {
   if (user) loadPartnerData(user)
+}, [user])
+
+useEffect(() => {
+  if (!user?.id) return
+
+  const channel = supabase
+    .channel(`transactions-realtime-${user.id}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+      },
+      async (payload) => {
+        console.log('Realtime change received:', payload)
+        await loadTransactionsFromCloud(user)
+      }
+    )
+    .subscribe((status) => {
+      console.log('Realtime status:', status)
+    })
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }, [user])
 
 useEffect(() => {
@@ -435,21 +491,10 @@ const myOpenSplitTransactions = useMemo(
   [transactions]
 )
 
-const myOpenSplitTotal = useMemo(
-  () =>
-    myOpenSplitTransactions.reduce((sum, t) => {
-      const half = Math.abs(Number(t.amount || 0)) / 2
-      if (t.splitDirection === 'owed_to_me') return sum + half
-      if (t.splitDirection === 'i_owe') return sum - half
-      return sum
-    }, 0),
-  [myOpenSplitTransactions]
-)
-
 const partnerOpenSplitTotal = useMemo(
   () =>
     partnerSplitTransactions.reduce((sum, t) => {
-      const half = Math.abs(Number(t.amount || 0)) / 2
+      const half = Math.abs(Number(t.amount) || 0) / 2
       if (t.splitDirection === 'owed_to_me') return sum + half
       if (t.splitDirection === 'i_owe') return sum - half
       return sum
@@ -457,9 +502,21 @@ const partnerOpenSplitTotal = useMemo(
   [partnerSplitTransactions]
 )
 
+const myOpenSplitTotal = useMemo(
+  () =>
+    myOpenSplitTransactions.reduce((sum, t) => {
+      const half = Math.abs(Number(t.amount) || 0) / 2
+      if (t.splitDirection === 'owed_to_me') return sum + half
+      if (t.splitDirection === 'i_owe') return sum - half
+      return sum
+    }, 0),
+  [myOpenSplitTransactions]
+)
+
+// Net: positive = partner owes you, negative = you owe partner
 const netSplitBalance = useMemo(
-  () => myOpenSplitTotal,
-  [myOpenSplitTotal]
+  () => myOpenSplitTotal - partnerOpenSplitTotal,
+  [myOpenSplitTotal, partnerOpenSplitTotal]
 )
 
 const splitBalanceLabel = useMemo(() => {
@@ -704,7 +761,6 @@ async function loadPartnerData(currentUser) {
     split: Boolean(t.split),
     splitPaid: Boolean(t.splitpaid),
     splitDirection: t.split_direction || null,
-    splitGroupId: t.split_group_id || null,
   }))
 )
 }
@@ -859,7 +915,6 @@ async function unsyncJointTransaction(tx, currentUser) {
   jointMode: null,
   account: t.account || 'personal',
   jointGroupId: t.joint_group_id || null,
-  splitGroupId: t.split_group_id || null,
   createdByUserId: t.created_by_user_id || null,
   sharedWithUserId: t.shared_with_user_id || null,
   splitDirection: t.split_direction || null,
@@ -875,25 +930,23 @@ async function addTransactionToCloud(tx, currentUser) {
     .from('transactions')
     .upsert(
       {
-  id: tx.id,
-  userid: currentUser.id,
-  date: tx.date,
-  description: tx.description,
-  merchant: tx.merchant,
-  amount: tx.amount,
-  category: tx.category,
-  split: tx.split,
-  splitpaid: tx.splitPaid,
-  joint: tx.joint,
-  joint_mode: tx.jointMode || null,
-  account: tx.account || 'personal',
-  joint_group_id: tx.jointGroupId || null,
-  split_group_id: tx.splitGroupId || null,
-  created_by_user_id: tx.createdByUserId || null,
-  shared_with_user_id: tx.sharedWithUserId || null,
-  split_direction: tx.splitDirection || null,
-  splitGroupId: t.split_group_id || null,
-},
+        id: tx.id,
+        userid: currentUser.id,
+        date: tx.date,
+        description: tx.description,
+        merchant: tx.merchant,
+        amount: tx.amount,
+        category: tx.category,
+        split: tx.split,
+        splitpaid: tx.splitPaid,
+        joint: tx.joint,
+        joint_mode: tx.jointMode || null,
+        account: tx.account || 'personal',
+        joint_group_id: tx.jointGroupId || null,
+        created_by_user_id: tx.createdByUserId || null,
+        shared_with_user_id: tx.sharedWithUserId || null,
+        split_direction: tx.splitDirection || null,
+      },
       { onConflict: 'userid,id' }
     )
     .select()
@@ -905,23 +958,22 @@ async function updateTransactionInCloud(tx, currentUser) {
   const { error } = await supabase
     .from('transactions')
     .update({
-  date: tx.date,
-  description: tx.description,
-  merchant: tx.merchant,
-  amount: tx.amount,
-  category: tx.category,
-  split: tx.split,
-  splitpaid: tx.splitPaid,
-  joint: tx.joint,
-  joint_mode: tx.jointMode || null,
-  account: tx.account || 'personal',
-  joint_group_id: tx.jointGroupId || null,
-  split_group_id: tx.splitGroupId || null,
-  created_by_user_id: tx.createdByUserId || null,
-  shared_with_user_id: tx.sharedWithUserId || null,
-  split_direction: tx.splitDirection || null,
-  splitGroupId: t.split_group_id || null,
-})
+      date: tx.date,
+      description: tx.description,
+      merchant: tx.merchant,
+      amount: tx.amount,
+      category: tx.category,
+      split: tx.split,
+      splitpaid: tx.splitPaid,
+      joint: tx.joint,
+      joint_mode: tx.jointMode || null,
+      account: tx.account || 'personal',
+      joint_group_id: tx.jointGroupId || null,
+      created_by_user_id: tx.createdByUserId || null,
+      shared_with_user_id: tx.sharedWithUserId || null,
+      splitpaid: tx.splitPaid,
+      split_direction: tx.splitDirection || null,
+    })
     .eq('userid', currentUser.id)
     .eq('id', tx.id)
 
@@ -1054,20 +1106,16 @@ async function handleJointToggle(tx) {
     const baseId = String(tx.id)
     const nextIsJoint = !(tx.joint || tx.account === 'joint')
     const jointGroupId = tx.jointGroupId || `joint_${baseId}`
-    const splitGroupId = tx.split ? (tx.splitGroupId || makeSplitGroupId(tx)) : null
 
     if (nextIsJoint) {
       const myUpdatePayload = {
-  joint: true,
-  joint_mode: 'full',
-  account: 'joint',
-  joint_group_id: jointGroupId,
-  split_group_id: splitGroupId,
-  split_direction: tx.split ? 'owed_to_me' : null,
-  created_by_user_id: user.id,
-  shared_with_user_id: partnerId,
-  split_group_id: tx.split ? (tx.splitGroupId || jointGroupId) : null,
-}
+        joint: true,
+        joint_mode: 'full',
+        account: 'joint',
+        joint_group_id: jointGroupId,
+        created_by_user_id: user.id,
+        shared_with_user_id: partnerId,
+      }
 
       console.log('Updating my row:', tx.id, myUpdatePayload)
 
@@ -1085,25 +1133,22 @@ async function handleJointToggle(tx) {
       const partnerRowId = `${baseId}__u${partnerId}`
 
       const partnerRow = {
-  id: partnerRowId,
-  userid: partnerId,
-  date: tx.date,
-  description: tx.description,
-  merchant: tx.merchant || tx.description,
-  amount: Number(tx.amount) || 0,
-  category: tx.category || 'Other',
-  split: Boolean(tx.split),
-  splitpaid: Boolean(tx.splitPaid),
-  split_direction: tx.split ? 'i_owe' : null,
-  split_group_id: splitGroupId,
-  joint: true,
-  joint_mode: 'full',
-  account: 'joint',
-  joint_group_id: jointGroupId,
-  created_by_user_id: user.id,
-  shared_with_user_id: user.id,
-  split_group_id: tx.split ? (tx.splitGroupId || jointGroupId) : null,
-}
+        id: partnerRowId,
+        userid: partnerId,
+        date: tx.date,
+        description: tx.description,
+        merchant: tx.merchant || tx.description,
+        amount: Number(tx.amount) || 0,
+        category: tx.category || 'Other',
+        split: Boolean(tx.split),
+        splitpaid: Boolean(tx.splitPaid),
+        joint: true,
+        joint_mode: 'full',
+        account: 'joint',
+        joint_group_id: jointGroupId,
+        created_by_user_id: user.id,
+        shared_with_user_id: user.id,
+      }
 
       console.log('Attempting partner insert:', partnerRow)
 
@@ -1120,22 +1165,21 @@ async function handleJointToggle(tx) {
         const { error: partnerUpdateError, data: partnerUpdateData } = await supabase
           .from('transactions')
           .update({
-  date: tx.date,
-  description: tx.description,
-  merchant: tx.merchant || tx.description,
-  amount: Number(tx.amount) || 0,
-  category: tx.category || 'Other',
-  split: Boolean(tx.split),
-  splitpaid: Boolean(tx.splitPaid),
-  split_direction: tx.split ? 'i_owe' : null,
-  split_group_id: splitGroupId,
-  joint: true,
-  joint_mode: 'full',
-  account: 'joint',
-  joint_group_id: jointGroupId,
-  created_by_user_id: user.id,
-  shared_with_user_id: user.id,
-})
+            date: tx.date,
+            description: tx.description,
+            merchant: tx.merchant || tx.description,
+            amount: Number(tx.amount) || 0,
+            category: tx.category || 'Other',
+            split: Boolean(tx.split),
+            splitpaid: Boolean(tx.splitPaid),
+            joint: true,
+            joint_mode: 'full',
+            account: 'joint',
+            joint_group_id: jointGroupId,
+            created_by_user_id: user.id,
+            shared_with_user_id: user.id,
+            split_direction: tx.split ? 'i_owe' : null,
+          })
           .eq('id', partnerRowId)
           .eq('userid', partnerId)
           .select()
@@ -1280,7 +1324,6 @@ async function handleClearAll() {
   }
 
   async function saveManualExpense() {
-  try {
     const rawAmount = String(manualDraft.amount ?? '').trim()
     const normalizedAmount = rawAmount.replace(/\s/g, '').replace('€', '').replace(',', '.')
     const amount = Number(normalizedAmount)
@@ -1313,70 +1356,55 @@ async function handleClearAll() {
       joint: false,
       jointMode: null,
       account: 'personal',
+    }
+
+let savedTransaction = newTransaction
+
+if (user) {
+  const { data, error } = await addTransactionToCloud(newTransaction, user)
+  if (error) {
+    setStatus(`Cloud save failed: ${error.message}`)
+    return
+  }
+
+  if (data?.[0]) {
+    savedTransaction = {
+      ...newTransaction,
+      ...data[0],
+      splitPaid: Boolean(data[0].splitpaid),
+      jointGroupId: data[0].joint_group_id || null,
+      createdByUserId: data[0].created_by_user_id || null,
+      sharedWithUserId: data[0].shared_with_user_id || null,
+      jointMode: data[0].joint_mode || null,
+      account: data[0].account || 'personal',
+    }
+  }
+
+  if (manualDraft.joint) {
+    savedTransaction = {
+      ...savedTransaction,
+      joint: false,
+      jointMode: null,
+      account: 'personal',
       jointGroupId: null,
       createdByUserId: null,
       sharedWithUserId: null,
     }
 
-    let savedTransaction = newTransaction
-
-    if (user) {
-      const { data, error } = await addTransactionToCloud(newTransaction, user)
-
-      if (error) {
-        setStatus(`Cloud save failed: ${error.message}`)
-        return
-      }
-
-      if (data?.[0]) {
-        savedTransaction = {
-          ...newTransaction,
-          ...data[0],
-          splitPaid: Boolean(data[0].splitpaid),
-          joint: Boolean(data[0].joint),
-          jointMode: data[0].joint_mode || null,
-          account: data[0].account || 'personal',
-          jointGroupId: data[0].joint_group_id || null,
-          createdByUserId: data[0].created_by_user_id || null,
-          sharedWithUserId: data[0].shared_with_user_id || null,
-          splitDirection: data[0].split_direction || newTransaction.splitDirection,
-        }
-      }
-    }
-
-    setTransactions((prev) => dedup([...prev, savedTransaction]))
-
-    if (manualDraft.joint) {
-      const jointReadyTransaction = {
-        ...savedTransaction,
-        joint: false,
-        jointMode: null,
-        account: 'personal',
-      }
-
-      await handleJointToggle(jointReadyTransaction)
-
-      if (user) {
-        await loadTransactionsFromCloud(user)
-        await loadPartnerData(user)
-      }
-    } else if (user) {
-      await loadPartnerData(user)
-    }
-
+    await handleJointToggle(savedTransaction)
     setShowAddModal(false)
     setEditingId(null)
+    setStatus('Manual expense added and synced to both users.')
     setActiveTab('Transactions')
-    setStatus(
-      manualDraft.joint
-        ? 'Manual expense added and synced to both users.'
-        : user
-          ? 'Manual expense added and saved online.'
-          : 'Manual expense added locally.'
-    )
-  } catch (err) {
-    setStatus(`Manual add failed: ${err.message}`)
+    return
   }
+}
+
+setTransactions((prev) => dedup([...prev, savedTransaction]))
+setShowAddModal(false)
+setEditingId(null)
+setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+setActiveTab('Transactions')
 }
 
 async function clearTransactionsFromCloud(currentUser) {
@@ -1422,43 +1450,56 @@ async function handleClear() {
     return
   }
 
-  const openSplitRows = transactions.filter((t) => t.split && !t.splitPaid)
+  const myOpenSplits = transactions.filter((t) => t.split && !t.splitPaid)
 
-  if (openSplitRows.length === 0) {
+  if (myOpenSplits.length === 0) {
     setStatus('No split transactions to mark as paid.')
     return
   }
 
-  const splitGroupIds = [
-    ...new Set(
-      openSplitRows
-        .map((t) => t.splitGroupId || t.jointGroupId)
-        .filter(Boolean)
-    ),
-  ]
+  const myIds = myOpenSplits.map((t) => t.id)
 
-  if (splitGroupIds.length === 0) {
-    setStatus('No split groups found to mark as paid.')
-    return
-  }
+  const partnerDescriptions = [...new Set(
+    myOpenSplits.map((t) => String(t.description || '').trim()).filter(Boolean)
+  )]
 
-  const { error } = await supabase
+  const { error: myError } = await supabase
     .from('transactions')
-    .update({
-      split: false,
-      splitpaid: true,
-    })
-    .in('split_group_id', splitGroupIds)
+    .update({ split: false, splitpaid: true })
+    .in('id', myIds)
+    .eq('userid', user.id)
 
-  if (error) {
-    setStatus(`Cloud save failed: ${error.message}`)
+  if (myError) {
+    setStatus(`Cloud save failed: ${myError.message}`)
     return
   }
+
+  if (partnerUser?.id && partnerDescriptions.length > 0) {
+    const { error: partnerError } = await supabase
+      .from('transactions')
+      .update({ split: false, splitpaid: true })
+      .eq('userid', partnerUser.id)
+      .eq('split', true)
+      .in('description', partnerDescriptions)
+
+    if (partnerError) {
+      setStatus(`Partner update failed: ${partnerError.message}`)
+      return
+    }
+  }
+
+  setTransactions((prev) =>
+    prev.map((t) =>
+      myIds.includes(t.id)
+        ? { ...t, split: false, splitPaid: true }
+        : t
+    )
+  )
 
   await loadTransactionsFromCloud(user)
   await loadPartnerData(user)
 
-  setStatus(`Marked ${splitGroupIds.length} split group(s) as paid for both users.`)
+  setStatus(`Marked ${myOpenSplits.length} split transactions as paid for both users.`)
 }
 
 async function toggleSplit(id) {
@@ -1470,145 +1511,29 @@ async function toggleSplit(id) {
     return
   }
 
-  if (!user?.id) {
-    const updatedTransaction = {
-      ...tx,
-      split: !tx.split,
-      splitPaid: false,
-      splitDirection: !tx.split ? 'owed_to_me' : null,
-    }
+  const updatedTransaction = {
+  ...tx,
+  split: !tx.split,
+  splitDirection: !tx.split ? 'owed_to_me' : null,
+}
 
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === id ? updatedTransaction : t))
-    )
-
-    setStatus(
-      updatedTransaction.split
-        ? 'Split updated locally.'
-        : 'Split removed locally.'
-    )
-    return
-  }
-
-  try {
-    const partnerId = getPartnerUserId(user)
-
-    if (!partnerId) {
-      setStatus('Partner user not found.')
-      return
-    }
-
-    const isJoint = tx.joint || tx.account === 'joint'
-
-    if (isJoint) {
-      const splitGroupId = tx.splitGroupId || tx.jointGroupId || `split_${tx.id}`
-
-      if (!tx.split) {
-        const { data: paidRows, error: paidCheckError } = await supabase
-          .from('transactions')
-          .select('id')
-          .eq('joint_group_id', tx.jointGroupId)
-          .eq('splitpaid', true)
-          .limit(1)
-
-        if (paidCheckError) {
-          setStatus(`Split check failed: ${paidCheckError.message}`)
-          return
-        }
-
-        if (paidRows && paidRows.length > 0) {
-          setStatus('This joint transaction was already settled and cannot be split again.')
-          return
-        }
-
-        const { error: myError } = await supabase
-          .from('transactions')
-          .update({
-            split: true,
-            splitpaid: false,
-            split_group_id: splitGroupId,
-            split_direction: 'owed_to_me',
-          })
-          .eq('joint_group_id', tx.jointGroupId)
-          .eq('userid', user.id)
-
-        if (myError) {
-          setStatus(`Cloud save failed: ${myError.message}`)
-          return
-        }
-
-        const { error: partnerError } = await supabase
-          .from('transactions')
-          .update({
-            split: true,
-            splitpaid: false,
-            split_group_id: splitGroupId,
-            split_direction: 'i_owe',
-          })
-          .eq('joint_group_id', tx.jointGroupId)
-          .eq('userid', partnerId)
-
-        if (partnerError) {
-          setStatus(`Partner update failed: ${partnerError.message}`)
-          return
-        }
-
-        await loadTransactionsFromCloud(user)
-        await loadPartnerData(user)
-        setStatus('Split enabled for both users.')
-        return
-      }
-
-      const { error: unsplitError } = await supabase
-        .from('transactions')
-        .update({
-          split: false,
-          splitpaid: false,
-          split_group_id: null,
-          split_direction: null,
-        })
-        .eq('joint_group_id', tx.jointGroupId)
-        .eq('splitpaid', false)
-
-      if (unsplitError) {
-        setStatus(`Cloud save failed: ${unsplitError.message}`)
-        return
-      }
-
-      await loadTransactionsFromCloud(user)
-      await loadPartnerData(user)
-      setStatus('Split removed for both users.')
-      return
-    }
-
-    const updatedTransaction = {
-      ...tx,
-      split: !tx.split,
-      splitPaid: false,
-      splitGroupId: !tx.split ? (tx.splitGroupId || `split_${tx.id}`) : null,
-      splitDirection: !tx.split ? 'owed_to_me' : null,
-    }
-
+  if (user) {
     const error = await updateTransactionInCloud(updatedTransaction, user)
     if (error) {
       setStatus(`Cloud save failed: ${error.message}`)
       return
     }
-
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === id ? updatedTransaction : t))
-    )
-
-    await loadPartnerData(user)
-
-    setStatus(
-      updatedTransaction.split
-        ? 'Split updated and saved online.'
-        : 'Split removed and saved online.'
-    )
-  } catch (err) {
-    setStatus(`Split toggle failed: ${err.message}`)
   }
+
+  setTransactions((prev) =>
+    prev.map((t) => (t.id === id ? updatedTransaction : t))
+  )
+
+  setStatus(
+    updatedTransaction.split
+      ? 'Split updated and saved online.'
+      : 'Split removed and saved online.'
+  )
 }
 
 async function toggleJoint(id) {
@@ -1696,25 +1621,21 @@ async function saveEdit(id) {
     return
   }
 
-  const nextSplit = original.splitPaid ? false : Boolean(editDraft.split)
-
-const updatedTransaction = {
-  ...original,
-  date: editDraft.date,
-  description: editDraft.description.trim() || original.description,
-  merchant: editDraft.description.trim() || original.merchant,
-  category: editDraft.category || 'Other',
-  amount,
-  split: nextSplit,
-  splitPaid: Boolean(original.splitPaid),
-  splitDirection: nextSplit ? (original.splitDirection || 'owed_to_me') : null,
-  splitGroupId: nextSplit ? (original.splitGroupId || makeSplitGroupId(original)) : original.splitGroupId,
-  joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
-  jointMode: null,
-  account: original.account === 'joint'
-    ? 'joint'
-    : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
-}
+  const updatedTransaction = {
+    ...original,
+    date: editDraft.date,
+    description: editDraft.description.trim() || original.description,
+    merchant: editDraft.description.trim() || original.merchant,
+    category: editDraft.category || 'Other',
+    amount,
+    split: original.splitPaid ? false : Boolean(editDraft.split),
+    splitPaid: Boolean(original.splitPaid),
+    joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
+    jointMode: null,
+    account: original.account === 'joint'
+      ? 'joint'
+      : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
+  }
 
   if (user) {
     const error = await updateTransactionInCloud(updatedTransaction, user)
