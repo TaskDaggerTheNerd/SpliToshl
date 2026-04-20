@@ -1281,6 +1281,7 @@ async function handleClearAll() {
   }
 
   async function saveManualExpense() {
+  try {
     const rawAmount = String(manualDraft.amount ?? '').trim()
     const normalizedAmount = rawAmount.replace(/\s/g, '').replace('€', '').replace(',', '.')
     const amount = Number(normalizedAmount)
@@ -1300,49 +1301,16 @@ async function handleClearAll() {
       return
     }
 
-    const baseId = `${manualDraft.date}-${manualDraft.description.trim()}-${amount}-${Date.now()}`
-
-const newTransaction = {
-  id: baseId,
-  date: manualDraft.date,
-  description: manualDraft.description.trim(),
-  merchant: manualDraft.description.trim(),
-  amount,
-  category: manualDraft.category || 'Other',
-  split: Boolean(manualDraft.split),
-  splitDirection: manualDraft.split ? 'owed_to_me' : null,
-  splitGroupId: manualDraft.split ? makeSplitGroupId({ id: baseId, date: manualDraft.date, description: manualDraft.description.trim() }) : null,
-  splitPaid: false,
-  joint: false,
-  jointMode: null,
-  account: 'personal',
-}
-
-let savedTransaction = newTransaction
-
-if (user) {
-  const { data, error } = await addTransactionToCloud(newTransaction, user)
-  if (error) {
-    setStatus(`Cloud save failed: ${error.message}`)
-    return
-  }
-
-  if (data?.[0]) {
-    savedTransaction = {
-      ...newTransaction,
-      ...data[0],
-      splitPaid: Boolean(data[0].splitpaid),
-      jointGroupId: data[0].joint_group_id || null,
-      createdByUserId: data[0].created_by_user_id || null,
-      sharedWithUserId: data[0].shared_with_user_id || null,
-      jointMode: data[0].joint_mode || null,
-      account: data[0].account || 'personal',
-    }
-  }
-
-  if (manualDraft.joint) {
-    savedTransaction = {
-      ...savedTransaction,
+    const newTransaction = {
+      id: `${manualDraft.date}-${manualDraft.description.trim()}-${amount}-${Date.now()}`,
+      date: manualDraft.date,
+      description: manualDraft.description.trim(),
+      merchant: manualDraft.description.trim(),
+      amount,
+      category: manualDraft.category || 'Other',
+      split: Boolean(manualDraft.split),
+      splitDirection: manualDraft.split ? 'owed_to_me' : null,
+      splitPaid: false,
       joint: false,
       jointMode: null,
       account: 'personal',
@@ -1351,20 +1319,73 @@ if (user) {
       sharedWithUserId: null,
     }
 
-    await handleJointToggle(savedTransaction)
+    let savedTransaction = newTransaction
+
+    if (user) {
+      const { data, error } = await addTransactionToCloud(newTransaction, user)
+
+      if (error) {
+        setStatus(`Cloud save failed: ${error.message}`)
+        return
+      }
+
+      if (data?.[0]) {
+        savedTransaction = {
+          ...newTransaction,
+          ...data[0],
+          splitPaid: Boolean(data[0].splitpaid),
+          joint: Boolean(data[0].joint),
+          jointMode: data[0].joint_mode || null,
+          account: data[0].account || 'personal',
+          jointGroupId: data[0].joint_group_id || null,
+          createdByUserId: data[0].created_by_user_id || null,
+          sharedWithUserId: data[0].shared_with_user_id || null,
+          splitDirection: data[0].split_direction || newTransaction.splitDirection,
+        }
+      }
+    }
+
+    setTransactions((prev) => dedup([...prev, savedTransaction]))
+
+    if (manualDraft.joint) {
+      try {
+        await handleJointToggle({
+          ...savedTransaction,
+          joint: false,
+          jointMode: null,
+          account: 'personal',
+        })
+
+        if (user) {
+          await loadTransactionsFromCloud(user)
+          await loadPartnerData(user)
+        }
+
+        setShowAddModal(false)
+        setEditingId(null)
+        setActiveTab('Transactions')
+        setStatus('Manual expense added and synced to both users.')
+        return
+      } catch (err) {
+        setShowAddModal(false)
+        setEditingId(null)
+        setActiveTab('Transactions')
+        setStatus(`Expense saved, but joint sync failed: ${err.message}`)
+        return
+      }
+    }
+
+    if (user) {
+      await loadPartnerData(user)
+    }
+
     setShowAddModal(false)
     setEditingId(null)
-    setStatus('Manual expense added and synced to both users.')
     setActiveTab('Transactions')
-    return
+    setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
+  } catch (err) {
+    setStatus(`Manual add failed: ${err.message}`)
   }
-}
-
-setTransactions((prev) => dedup([...prev, savedTransaction]))
-setShowAddModal(false)
-setEditingId(null)
-setStatus(user ? 'Manual expense added and saved online.' : 'Manual expense added locally.')
-setActiveTab('Transactions')
 }
 
 async function clearTransactionsFromCloud(currentUser) {
