@@ -170,6 +170,9 @@ export default function App() {
   const fileRef = useRef(null)
   const jsonRef = useRef(null)
 
+  const currentYear = String(new Date().getFullYear())
+  const [kpiYear, setKpiYear] = useState(currentYear)
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
@@ -628,6 +631,66 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     return PALETTE[safeIdx % PALETTE.length]
   }
 
+  const availableYears = useMemo(() => {
+  const years = [
+    ...new Set(
+      transactions
+        .map((t) => String(t.date || '').slice(0, 4))
+        .filter((y) => /^\d{4}$/.test(y))
+    ),
+  ].sort((a, b) => Number(b) - Number(a))
+
+  return years.length ? years : [currentYear]
+}, [transactions, currentYear])
+
+useEffect(() => {
+  if (!availableYears.includes(kpiYear)) {
+    setKpiYear(currentYear)
+  }
+}, [availableYears, kpiYear, currentYear])
+
+const kpiTransactions = useMemo(() => {
+  return transactions.filter((t) => String(t.date || '').slice(0, 4) === kpiYear)
+}, [transactions, kpiYear])
+
+const kpiMyTransactions = useMemo(() => {
+  return kpiTransactions.map((t) => {
+    const amount = Math.abs(Number(t.amount || 0))
+    const isJoint = t.account === 'joint' || t.joint
+    const myAmount = isJoint ? amount / 2 : amount
+    return { ...t, myAmount }
+  })
+}, [kpiTransactions])
+
+const kpiJointTransactions = useMemo(() => {
+  return kpiTransactions
+    .filter((t) => t.account === 'joint' || t.joint)
+    .map((t) => {
+      const amount = Math.abs(Number(t.amount || 0))
+      return { ...t, jointAmount: amount }
+    })
+}, [kpiTransactions])
+
+const kpiMySpend = useMemo(
+  () => kpiMyTransactions.reduce((s, t) => s + Number(t.myAmount || 0), 0),
+  [kpiMyTransactions]
+)
+
+const kpiTransactionCount = useMemo(
+  () => kpiTransactions.length,
+  [kpiTransactions]
+)
+
+const kpiCategoryCount = useMemo(
+  () => new Set(kpiTransactions.map((t) => t.category || 'Other')).size,
+  [kpiTransactions]
+)
+
+const kpiJointSpend = useMemo(
+  () => kpiJointTransactions.reduce((s, t) => s + Number(t.jointAmount || 0), 0),
+  [kpiJointTransactions]
+)
+  
   const hasData = transactions.length > 0
 
  async function signInWithNamePassword(username, password) {
@@ -1768,28 +1831,84 @@ async function deleteTransaction(id) {
         </div>
       </header>
 
-      <section className="kpis">
-        <div className="kpi-card">
-          <div className="label">My Spend</div>
-          <div className="value">{fmtEUR(myTotalSpend)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Transactions</div>
-          <div className="value">{fmtInt(filtered.length)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Categories</div>
-          <div className="value">{fmtInt(categoryData.length)}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="label">Joint Spend (full)</div>
-          <div className="value">{fmtEUR(jointTotal)}</div>
-        </div>
-        <div className="kpi-card accent">
-           <div className="label">{splitBalanceLabel}</div>
-           <div className="value">{fmtEUR(splitBalanceValue)}</div>
-        </div>
-      </section>
+<section className="kpis">
+  <div className="kpi-card">
+    <div className="label-row">
+      <div className="label">My Spend</div>
+      <select
+        className="kpi-year-select"
+        value={kpiYear}
+        onChange={(e) => setKpiYear(e.target.value)}
+      >
+        {availableYears.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div className="value">{fmtEUR(kpiMySpend)}</div>
+  </div>
+
+  <div className="kpi-card">
+    <div className="label-row">
+      <div className="label">Transactions</div>
+      <select
+        className="kpi-year-select"
+        value={kpiYear}
+        onChange={(e) => setKpiYear(e.target.value)}
+      >
+        {availableYears.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div className="value">{fmtInt(kpiTransactionCount)}</div>
+  </div>
+
+  <div className="kpi-card">
+    <div className="label-row">
+      <div className="label">Categories</div>
+      <select
+        className="kpi-year-select"
+        value={kpiYear}
+        onChange={(e) => setKpiYear(e.target.value)}
+      >
+        {availableYears.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div className="value">{fmtInt(kpiCategoryCount)}</div>
+  </div>
+
+  <div className="kpi-card">
+    <div className="label-row">
+      <div className="label">Joint Spend (full)</div>
+      <select
+        className="kpi-year-select"
+        value={kpiYear}
+        onChange={(e) => setKpiYear(e.target.value)}
+      >
+        {availableYears.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div className="value">{fmtEUR(kpiJointSpend)}</div>
+  </div>
+
+  <div className="kpi-card accent">
+    <div className="label">{splitBalanceLabel}</div>
+    <div className="value">{fmtEUR(splitBalanceValue)}</div>
+  </div>
+</section>
 
       <nav className="tabs">
         {TABS.map((tab) => (
