@@ -127,6 +127,54 @@ function getMonthKey(dateStr) {
   return d.length >= 7 ? d.slice(0, 7) : ''
 }
 
+function makeSplitGroupId(tx) {
+  if (tx?.splitGroupId) return tx.splitGroupId
+
+  const baseId = String(tx?.id || '')
+    .replace(/__u[12]$/, '')
+    .trim()
+
+  return `split_${baseId}`
+}
+
+function getSplitDirectionForUser(currentUser, tx) {
+  if (!currentUser?.id) return null
+
+  const creatorId = tx?.createdByUserId ?? tx?.created_by_user_id ?? null
+
+  if (creatorId && Number(creatorId) === Number(currentUser.id)) {
+    return 'owed_to_me'
+  }
+
+  return 'i_owe'
+}
+
+function canCurrentUserToggleSplit(currentUser, tx) {
+  if (!currentUser?.id) return false
+  if (tx?.splitPaid) return false
+  if (!tx?.split) return true
+
+  const creatorId = tx?.createdByUserId ?? tx?.created_by_user_id ?? null
+  return Number(creatorId) === Number(currentUser.id)
+}
+
+async function findPartnerSplitRow(currentUser, tx) {
+  const partnerId = getPartnerUserId(currentUser)
+  if (!partnerId) return null
+
+  const splitGroupId = tx.splitGroupId || makeSplitGroupId(tx)
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('userid', partnerId)
+    .eq('split_group_id', splitGroupId)
+    .limit(1)
+
+  if (error) throw error
+  return data?.[0] || null
+}
+
 export default function App() {
   const [transactions, setTransactions] = useState([])
   const [activeTab, setActiveTab] = useState('Own')
@@ -515,8 +563,8 @@ const myOpenSplitTotal = useMemo(
 
 // Net: positive = partner owes you, negative = you owe partner
 const netSplitBalance = useMemo(
-  () => myOpenSplitTotal - partnerOpenSplitTotal,
-  [myOpenSplitTotal, partnerOpenSplitTotal]
+  () => myOpenSplitTotal,
+  [myOpenSplitTotal]
 )
 
 const splitBalanceLabel = useMemo(() => {
@@ -761,6 +809,9 @@ async function loadPartnerData(currentUser) {
     split: Boolean(t.split),
     splitPaid: Boolean(t.splitpaid),
     splitDirection: t.split_direction || null,
+    splitGroupId: t.split_group_id || null,
+    createdByUserId: t.created_by_user_id || null,
+    sharedWithUserId: t.shared_with_user_id || null,
   }))
 )
 }
@@ -918,6 +969,7 @@ async function unsyncJointTransaction(tx, currentUser) {
   createdByUserId: t.created_by_user_id || null,
   sharedWithUserId: t.shared_with_user_id || null,
   splitDirection: t.split_direction || null,
+  splitGroupId: t.split_group_id || null,
 }))
 
     const normalized = dedup(normalizeTransactions(mapped))
@@ -946,6 +998,7 @@ async function addTransactionToCloud(tx, currentUser) {
         created_by_user_id: tx.createdByUserId || null,
         shared_with_user_id: tx.sharedWithUserId || null,
         split_direction: tx.splitDirection || null,
+        split_group_id: tx.splitGroupId || null,
       },
       { onConflict: 'userid,id' }
     )
@@ -971,8 +1024,8 @@ async function updateTransactionInCloud(tx, currentUser) {
       joint_group_id: tx.jointGroupId || null,
       created_by_user_id: tx.createdByUserId || null,
       shared_with_user_id: tx.sharedWithUserId || null,
-      splitpaid: tx.splitPaid,
       split_direction: tx.splitDirection || null,
+      split_group_id: tx.splitGroupId || null,
     })
     .eq('userid', currentUser.id)
     .eq('id', tx.id)
@@ -1102,30 +1155,35 @@ async function handleJointToggle(tx) {
       return
     }
 
-    const partnerId = user.id === 1 ? 2 : 1
-    const baseId = String(tx.id)
+    const partnerId = getPartnerUserId(user)
+    const baseId = String(tx.id).replace(/__u[12]$/, '')
     const nextIsJoint = !(tx.joint || tx.account === 'joint')
     const jointGroupId = tx.jointGroupId || `joint_${baseId}`
+    const splitGroupId = tx.split ? (tx.splitGroupId || makeSplitGroupId(tx)) : null
 
     if (nextIsJoint) {
+      const myDirection = tx.split ? getSplitDirectionForUser(user, { ...tx, createdByUserId: tx.createdByUserId || user.id }) : null
+
       const myUpdatePayload = {
         joint: true,
         joint_mode: 'full',
         account: 'joint',
         joint_group_id: jointGroupId,
-        created_by_user_id: user.id,
+        created_by_user_id: tx.createdByUserId || user.id,
         shared_with_user_id: partnerId,
+        split: Boolean(tx.split),
+        splitpaid: Boolean(tx.splitPaid),
+        split_direction: myDirection,
+        split_group_id: splitGroupId,
       }
-
-      console.log('Updating my row:', tx.id, myUpdatePayload)
 
       const { error: updateMineError } = await supabase
         .from('transactions')
         .update(myUpdatePayload)
         .eq('id', tx.id)
+        .eq('userid', user.id)
 
       if (updateMineError) {
-        console.error('updateMineError:', updateMineError)
         setStatus(`Failed to update your row: ${updateMineError.message}`)
         return
       }
@@ -1142,59 +1200,28 @@ async function handleJointToggle(tx) {
         category: tx.category || 'Other',
         split: Boolean(tx.split),
         splitpaid: Boolean(tx.splitPaid),
+        split_direction: tx.split ? 'i_owe' : null,
+        split_group_id: splitGroupId,
         joint: true,
         joint_mode: 'full',
         account: 'joint',
         joint_group_id: jointGroupId,
-        created_by_user_id: user.id,
+        created_by_user_id: tx.createdByUserId || user.id,
         shared_with_user_id: user.id,
       }
 
-      console.log('Attempting partner insert:', partnerRow)
-
-      const { error: partnerInsertError, data: partnerInsertData } = await supabase
+      const { error: partnerUpsertError } = await supabase
         .from('transactions')
-        .insert([partnerRow])
-        .select()
+        .upsert([partnerRow], { onConflict: 'id' })
 
-      console.log('partnerInsertData:', partnerInsertData)
-
-      if (partnerInsertError) {
-        console.error('partnerInsertError:', partnerInsertError)
-
-        const { error: partnerUpdateError, data: partnerUpdateData } = await supabase
-          .from('transactions')
-          .update({
-            date: tx.date,
-            description: tx.description,
-            merchant: tx.merchant || tx.description,
-            amount: Number(tx.amount) || 0,
-            category: tx.category || 'Other',
-            split: Boolean(tx.split),
-            splitpaid: Boolean(tx.splitPaid),
-            joint: true,
-            joint_mode: 'full',
-            account: 'joint',
-            joint_group_id: jointGroupId,
-            created_by_user_id: user.id,
-            shared_with_user_id: user.id,
-            split_direction: tx.split ? 'i_owe' : null,
-          })
-          .eq('id', partnerRowId)
-          .eq('userid', partnerId)
-          .select()
-
-        console.log('partnerUpdateData:', partnerUpdateData)
-
-        if (partnerUpdateError) {
-          console.error('partnerUpdateError:', partnerUpdateError)
-          setStatus(`Failed to create/update partner row: ${partnerUpdateError.message}`)
-          return
-        }
+      if (partnerUpsertError) {
+        setStatus(`Failed to create/update partner row: ${partnerUpsertError.message}`)
+        return
       }
 
       setStatus('Joint transaction synced to both users.')
       await loadTransactionsFromCloud(user)
+      await loadPartnerData(user)
       return
     }
 
@@ -1204,9 +1231,9 @@ async function handleJointToggle(tx) {
       .from('transactions')
       .delete()
       .eq('id', partnerRowId)
+      .eq('userid', partnerId)
 
     if (deletePartnerError) {
-      console.error('deletePartnerError:', deletePartnerError)
       setStatus(`Failed to remove partner row: ${deletePartnerError.message}`)
       return
     }
@@ -1218,25 +1245,25 @@ async function handleJointToggle(tx) {
       joint_group_id: null,
       created_by_user_id: null,
       shared_with_user_id: null,
+      split_group_id: tx.split ? (tx.splitGroupId || makeSplitGroupId(tx)) : null,
+      split_direction: tx.split ? getSplitDirectionForUser(user, tx) : null,
     }
-
-    console.log('Resetting my row:', tx.id, resetPayload)
 
     const { error: resetMineError } = await supabase
       .from('transactions')
       .update(resetPayload)
       .eq('id', tx.id)
+      .eq('userid', user.id)
 
     if (resetMineError) {
-      console.error('resetMineError:', resetMineError)
       setStatus(`Failed to reset your row: ${resetMineError.message}`)
       return
     }
 
     setStatus('Joint transaction removed from both users.')
     await loadTransactionsFromCloud(user)
+    await loadPartnerData(user)
   } catch (err) {
-    console.error('handleJointToggle crash:', err)
     setStatus(`Joint toggle crashed: ${err.message}`)
   }
 }
@@ -1445,42 +1472,49 @@ async function handleClear() {
 }
 
   async function markAllSplitsPaid() {
-  if (!user) {
+  if (!user?.id) {
     setStatus('You need to be signed in to mark splits as paid.')
     return
   }
 
-  const myOpenSplits = transactions.filter((t) => t.split && !t.splitPaid)
+  const openSplits = transactions.filter((t) => t.split && !t.splitPaid)
 
-  if (myOpenSplits.length === 0) {
+  if (openSplits.length === 0) {
     setStatus('No split transactions to mark as paid.')
     return
   }
 
-  const myIds = myOpenSplits.map((t) => t.id)
-
-  const partnerDescriptions = [...new Set(
-    myOpenSplits.map((t) => String(t.description || '').trim()).filter(Boolean)
+  const splitGroupIds = [...new Set(
+    openSplits
+      .map((t) => t.splitGroupId || makeSplitGroupId(t))
+      .filter(Boolean)
   )]
+
+  const myIds = openSplits.map((t) => t.id)
 
   const { error: myError } = await supabase
     .from('transactions')
-    .update({ split: false, splitpaid: true })
-    .in('id', myIds)
+    .update({
+      split: false,
+      splitpaid: true,
+    })
     .eq('userid', user.id)
+    .in('id', myIds)
 
   if (myError) {
     setStatus(`Cloud save failed: ${myError.message}`)
     return
   }
 
-  if (partnerUser?.id && partnerDescriptions.length > 0) {
+  if (partnerUser?.id && splitGroupIds.length > 0) {
     const { error: partnerError } = await supabase
       .from('transactions')
-      .update({ split: false, splitpaid: true })
+      .update({
+        split: false,
+        splitpaid: true,
+      })
       .eq('userid', partnerUser.id)
-      .eq('split', true)
-      .in('description', partnerDescriptions)
+      .in('split_group_id', splitGroupIds)
 
     if (partnerError) {
       setStatus(`Partner update failed: ${partnerError.message}`)
@@ -1488,51 +1522,86 @@ async function handleClear() {
     }
   }
 
-  setTransactions((prev) =>
-    prev.map((t) =>
-      myIds.includes(t.id)
-        ? { ...t, split: false, splitPaid: true }
-        : t
-    )
-  )
-
   await loadTransactionsFromCloud(user)
   await loadPartnerData(user)
 
-  setStatus(`Marked ${myOpenSplits.length} split transactions as paid for both users.`)
+  setStatus(`Marked ${openSplits.length} split transactions as paid for both users.`)
 }
 
 async function toggleSplit(id) {
   const tx = transactions.find((t) => t.id === id)
   if (!tx) return
 
-  if (tx.splitPaid) {
-    setStatus('This transaction was already split and paid in the past.')
+  if (!user?.id) {
+    setStatus('Please log in first.')
     return
   }
 
-  const updatedTransaction = {
-  ...tx,
-  split: !tx.split,
-  splitDirection: !tx.split ? 'owed_to_me' : null,
-}
+  if (tx.splitPaid) {
+    setStatus('This transaction is already paid for both users.')
+    return
+  }
 
-  if (user) {
-    const error = await updateTransactionInCloud(updatedTransaction, user)
-    if (error) {
-      setStatus(`Cloud save failed: ${error.message}`)
+  if (!canCurrentUserToggleSplit(user, tx)) {
+    setStatus('This split was created by the other user and cannot be changed from this account.')
+    return
+  }
+
+  const partnerId = getPartnerUserId(user)
+  if (!partnerId) {
+    setStatus('Partner account not found.')
+    return
+  }
+
+  const nextSplit = !tx.split
+  const splitGroupId = tx.splitGroupId || makeSplitGroupId(tx)
+  const creatorId = nextSplit ? (tx.createdByUserId || user.id) : null
+
+  const myUpdatedTransaction = {
+    ...tx,
+    split: nextSplit,
+    splitPaid: false,
+    splitDirection: nextSplit ? 'owed_to_me' : null,
+    splitGroupId: nextSplit ? splitGroupId : null,
+    createdByUserId: nextSplit ? creatorId : tx.createdByUserId,
+    sharedWithUserId: partnerId,
+  }
+
+  const myError = await updateTransactionInCloud(myUpdatedTransaction, user)
+  if (myError) {
+    setStatus(`Cloud save failed: ${myError.message}`)
+    return
+  }
+
+  const partnerRow = await findPartnerSplitRow(user, { ...tx, splitGroupId })
+
+  if (partnerRow) {
+    const { error: partnerError } = await supabase
+      .from('transactions')
+      .update({
+        split: nextSplit,
+        splitpaid: false,
+        split_direction: nextSplit ? 'i_owe' : null,
+        split_group_id: nextSplit ? splitGroupId : null,
+        created_by_user_id: nextSplit ? creatorId : partnerRow.created_by_user_id,
+        shared_with_user_id: user.id,
+      })
+      .eq('id', partnerRow.id)
+      .eq('userid', partnerId)
+
+    if (partnerError) {
+      setStatus(`Partner split update failed: ${partnerError.message}`)
       return
     }
   }
 
-  setTransactions((prev) =>
-    prev.map((t) => (t.id === id ? updatedTransaction : t))
-  )
+  await loadTransactionsFromCloud(user)
+  await loadPartnerData(user)
 
   setStatus(
-    updatedTransaction.split
-      ? 'Split updated and saved online.'
-      : 'Split removed and saved online.'
+    nextSplit
+      ? 'Split enabled for both users.'
+      : 'Split removed for both users.'
   )
 }
 
@@ -1622,20 +1691,30 @@ async function saveEdit(id) {
   }
 
   const updatedTransaction = {
-    ...original,
-    date: editDraft.date,
-    description: editDraft.description.trim() || original.description,
-    merchant: editDraft.description.trim() || original.merchant,
-    category: editDraft.category || 'Other',
-    amount,
-    split: original.splitPaid ? false : Boolean(editDraft.split),
-    splitPaid: Boolean(original.splitPaid),
-    joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
-    jointMode: null,
-    account: original.account === 'joint'
-      ? 'joint'
-      : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
-  }
+  ...original,
+  date: editDraft.date,
+  description: editDraft.description.trim() || original.description,
+  merchant: editDraft.description.trim() || original.merchant,
+  category: editDraft.category || 'Other',
+  amount,
+  split: original.splitPaid ? false : Boolean(editDraft.split),
+  splitPaid: Boolean(original.splitPaid),
+  splitDirection: original.splitPaid
+    ? original.splitDirection
+    : (Boolean(editDraft.split)
+        ? (original.splitDirection || getSplitDirectionForUser(user, original) || 'owed_to_me')
+        : null),
+  splitGroupId: original.splitPaid
+    ? original.splitGroupId
+    : (Boolean(editDraft.split)
+        ? (original.splitGroupId || makeSplitGroupId(original))
+        : null),
+  joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
+  jointMode: null,
+  account: original.account === 'joint'
+    ? 'joint'
+    : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
+}
 
   if (user) {
     const error = await updateTransactionInCloud(updatedTransaction, user)
@@ -2525,15 +2604,21 @@ async function deleteTransaction(id) {
                             </select>
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <button
-                                type="button"
-                                className={`btn btn-split ${t.split || t.splitPaid ? 'yes' : ''}`}
-                                onClick={() => toggleSplit(t.id)}
-                                disabled={t.splitPaid}
-                                title={t.splitPaid ? 'Already split and paid in the past' : ''}
-                              >
-                                {t.split || t.splitPaid ? 'Yes' : 'No'}
-                              </button>
+<button
+  type="button"
+  className={`btn btn-split ${t.split || t.splitPaid ? 'yes' : ''}`}
+  onClick={() => toggleSplit(t.id)}
+  disabled={t.splitPaid || !canCurrentUserToggleSplit(user, t)}
+  title={
+    t.splitPaid
+      ? 'Already split and paid in the past'
+      : (!canCurrentUserToggleSplit(user, t) && t.split)
+        ? 'This split was set by the other user and cannot be changed here'
+        : ''
+  }
+>
+  {t.split || t.splitPaid ? 'Yes' : 'No'}
+</button>
                               {t.splitPaid && (
                                 <span
                                   style={{
