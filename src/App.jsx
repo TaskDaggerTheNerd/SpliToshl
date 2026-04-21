@@ -1169,27 +1169,29 @@ async function handleJointToggle(tx) {
     const creatorId = tx.createdByUserId || user.id
 
     if (nextIsJoint) {
-      const myRow = {
-        id: baseId,
-        userid: user.id,
-        date: tx.date,
-        description: tx.description,
-        merchant: tx.merchant || tx.description,
-        amount: Number(tx.amount) || 0,
-        category: tx.category || 'Other',
-        split: Boolean(tx.split),
-        splitpaid: Boolean(tx.splitPaid),
-        split_direction: tx.split ? 'owed_to_me' : null,
-        split_group_id: splitGroupId,
-        joint: true,
-        joint_mode: 'full',
-        account: 'joint',
-        joint_group_id: jointGroupId,
-        created_by_user_id: creatorId,
-        shared_with_user_id: partnerId,
+      const { error: myUpdateError } = await supabase
+        .from('transactions')
+        .update({
+          joint: true,
+          joint_mode: 'full',
+          account: 'joint',
+          joint_group_id: jointGroupId,
+          split: Boolean(tx.split),
+          splitpaid: Boolean(tx.splitPaid),
+          split_direction: tx.split ? 'owed_to_me' : null,
+          split_group_id: splitGroupId,
+          created_by_user_id: creatorId,
+          shared_with_user_id: partnerId,
+        })
+        .eq('userid', user.id)
+        .eq('id', baseId)
+
+      if (myUpdateError) {
+        setStatus(`Failed to update your row: ${myUpdateError.message}`)
+        return
       }
 
-      const partnerRow = {
+      const partnerPayload = {
         id: partnerRowId,
         userid: partnerId,
         date: tx.date,
@@ -1209,13 +1211,54 @@ async function handleJointToggle(tx) {
         shared_with_user_id: user.id,
       }
 
-      const { error } = await supabase
+      const { data: existingPartner, error: partnerFindError } = await supabase
         .from('transactions')
-        .upsert([myRow, partnerRow], { onConflict: 'id' })
+        .select('id')
+        .eq('userid', partnerId)
+        .eq('id', partnerRowId)
+        .limit(1)
 
-      if (error) {
-        setStatus(`Failed to sync joint transaction: ${error.message}`)
+      if (partnerFindError) {
+        setStatus(`Failed to check partner row: ${partnerFindError.message}`)
         return
+      }
+
+      if (existingPartner && existingPartner.length > 0) {
+        const { error: partnerUpdateError } = await supabase
+          .from('transactions')
+          .update({
+            date: partnerPayload.date,
+            description: partnerPayload.description,
+            merchant: partnerPayload.merchant,
+            amount: partnerPayload.amount,
+            category: partnerPayload.category,
+            split: partnerPayload.split,
+            splitpaid: partnerPayload.splitpaid,
+            split_direction: partnerPayload.split_direction,
+            split_group_id: partnerPayload.split_group_id,
+            joint: partnerPayload.joint,
+            joint_mode: partnerPayload.joint_mode,
+            account: partnerPayload.account,
+            joint_group_id: partnerPayload.joint_group_id,
+            created_by_user_id: partnerPayload.created_by_user_id,
+            shared_with_user_id: partnerPayload.shared_with_user_id,
+          })
+          .eq('userid', partnerId)
+          .eq('id', partnerRowId)
+
+        if (partnerUpdateError) {
+          setStatus(`Failed to update partner row: ${partnerUpdateError.message}`)
+          return
+        }
+      } else {
+        const { error: partnerInsertError } = await supabase
+          .from('transactions')
+          .insert([partnerPayload])
+
+        if (partnerInsertError) {
+          setStatus(`Failed to insert partner row: ${partnerInsertError.message}`)
+          return
+        }
       }
 
       setStatus('Joint transaction synced to both users.')
@@ -1224,14 +1267,14 @@ async function handleJointToggle(tx) {
       return
     }
 
-    const { error: partnerDeleteError } = await supabase
+    const { error: deletePartnerError } = await supabase
       .from('transactions')
       .delete()
-      .eq('id', partnerRowId)
       .eq('userid', partnerId)
+      .eq('id', partnerRowId)
 
-    if (partnerDeleteError) {
-      setStatus(`Failed to remove partner row: ${partnerDeleteError.message}`)
+    if (deletePartnerError) {
+      setStatus(`Failed to remove partner row: ${deletePartnerError.message}`)
       return
     }
 
@@ -1242,14 +1285,15 @@ async function handleJointToggle(tx) {
         joint_mode: null,
         account: 'personal',
         joint_group_id: null,
-        shared_with_user_id: null,
         split: Boolean(tx.split),
         splitpaid: Boolean(tx.splitPaid),
         split_direction: tx.split ? 'owed_to_me' : null,
         split_group_id: tx.split ? (tx.splitGroupId || `split_${baseId}`) : null,
+        created_by_user_id: creatorId,
+        shared_with_user_id: null,
       })
-      .eq('id', baseId)
       .eq('userid', user.id)
+      .eq('id', baseId)
 
     if (myResetError) {
       setStatus(`Failed to reset your row: ${myResetError.message}`)
