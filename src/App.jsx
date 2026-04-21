@@ -2640,7 +2640,7 @@ async function deleteTransaction(id) {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
 <button
   type="button"
-  className={`btn btn-split ${t.split || t.splitPaid ? 'yes' : ''}`}
+  className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
   onClick={() => toggleSplit(t.id)}
   disabled={
     t.splitPaid ||
@@ -2648,13 +2648,13 @@ async function deleteTransaction(id) {
   }
   title={
     t.splitPaid
-      ? 'Already split and paid in the past'
+      ? 'Already paid'
       : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
         ? 'This split was set by the other user and cannot be changed here'
         : ''
   }
 >
-  {t.split || t.splitPaid ? 'Yes' : 'No'}
+  {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
 </button>
                               {t.splitPaid && (
                                 <span

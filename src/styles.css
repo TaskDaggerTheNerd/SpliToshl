@@ -590,3 +590,9 @@ table { border-collapse: collapse; width: 100%; }
     padding: var(--space-8) var(--space-4);
   }
 }
+
+.btn-split.paid {
+  background: #dfe8df;
+  color: #2f5e2f;
+  border-color: #9db79d;
+}
