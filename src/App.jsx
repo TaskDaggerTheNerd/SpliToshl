@@ -2989,53 +2989,38 @@ async function deleteTransaction(id) {
                       )}
                     </td>
                     <td>
-                      {isEditing ? (
-                        <select
-                          className="field-input"
-                          value={editDraft.split ? 'yes' : 'no'}
-                          onChange={(e) => setEditDraft((p) => ({ ...p, split: e.target.value === 'yes' }))}
-                        >
-                          <option value="no">No</option>
-                          <option value="yes">Yes</option>
-                        </select>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <button
-                            type="button"
-                            className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
-                            onClick={() => toggleSplit(t.id)}
-                            disabled={
-                              t.splitPaid ||
-                              (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                            }
-                            title={
-                              t.splitPaid
-                                ? 'Already paid'
-                                : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                                  ? 'This split was set by the other user and cannot be changed here'
-                                  : ''
-                            }
-                          >
-                            {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
-                          </button>
-                          {t.splitPaid && (
-                            <span
-                              style={{
-                                fontSize: '0.72rem',
-                                padding: '0.2rem 0.45rem',
-                                borderRadius: '999px',
-                                background: 'var(--color-warning-highlight)',
-                                color: 'var(--color-warning)',
-                                whiteSpace: 'nowrap',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Already Paid
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
+  {isEditing ? (
+    <select
+      className="field-input"
+      value={editDraft.split ? 'yes' : 'no'}
+      onChange={(e) => setEditDraft((p) => ({ ...p, split: e.target.value === 'yes' }))}
+    >
+      <option value="no">No</option>
+      <option value="yes">Yes</option>
+    </select>
+  ) : (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <button
+        type="button"
+        className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+        onClick={() => toggleSplit(t.id)}
+        disabled={
+          t.splitPaid ||
+          (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+        }
+        title={
+          t.splitPaid
+            ? 'Already paid'
+            : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+              ? 'This split was set by the other user and cannot be changed here'
+              : ''
+        }
+      >
+        {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
+      </button>
+    </div>
+  )}
+</td>
                     <td>
                       {isEditing ? (
                         <select
