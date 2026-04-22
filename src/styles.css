@@ -1090,3 +1090,15 @@ table {
   white-space: nowrap;
   font-weight: 600;
 }
+
+.own-joint-filters {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 641px) {
+  .own-joint-filters {
+    grid-template-columns: 1fr 1fr auto;
+    align-items: end;
+  }
+}
