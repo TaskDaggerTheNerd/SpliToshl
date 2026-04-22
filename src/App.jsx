@@ -870,7 +870,6 @@ const kpiTransactions = useMemo(() => {
 }, [transactions, kpiYear])
 
 const monthOptions = [
-  { value: 'all', label: 'All months' },
   { value: '01', label: 'January' },
   { value: '02', label: 'February' },
   { value: '03', label: 'March' },
