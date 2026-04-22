@@ -2810,10 +2810,10 @@ async function deleteTransaction(id) {
                         <div className="tx-mobile-amount">{fmtEUR(t.amount || 0)}</div>
                       </div>
 
-                      <div className="tx-mobile-details">
-  <div className="tx-mobile-detail-row">
-    <span>Split</span>
-    <div className="tx-mobile-detail-value">
+                      <div className="tx-mobile-compact-actions">
+  <div className="tx-mobile-toggle-row">
+    <div className="tx-mobile-toggle-item">
+      <span className="tx-mobile-toggle-label">Split</span>
       <button
         type="button"
         className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
@@ -2833,11 +2833,9 @@ async function deleteTransaction(id) {
         {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
       </button>
     </div>
-  </div>
 
-  <div className="tx-mobile-detail-row">
-    <span>Joint?</span>
-    <div className="tx-mobile-detail-value">
+    <div className="tx-mobile-toggle-item">
+      <span className="tx-mobile-toggle-label">Joint</span>
       <button
         type="button"
         className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
@@ -2847,25 +2845,25 @@ async function deleteTransaction(id) {
       </button>
     </div>
   </div>
+
+  <div className="tx-mobile-actions tx-mobile-actions-compact">
+    <button
+      type="button"
+      className="btn btn-small"
+      onClick={() => startEdit(t)}
+    >
+      Edit
+    </button>
+
+    <button
+      type="button"
+      className="btn btn-small btn-danger"
+      onClick={() => deleteTransaction(t.id)}
+    >
+      Delete
+    </button>
+  </div>
 </div>
-
-                      <div className="tx-mobile-actions">
-                        <button
-                          type="button"
-                          className="btn btn-small"
-                          onClick={() => startEdit(t)}
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          className="btn btn-small btn-danger"
-                          onClick={() => deleteTransaction(t.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
                     </>
                   )}
                 </div>
