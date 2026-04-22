@@ -190,11 +190,11 @@ const [dateFilter, setDateFilter] = useState('')
 const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
 
 const [ownYearFilter, setOwnYearFilter] = useState(currentYearValue)
-const [ownMonthFilter, setOwnMonthFilter] = useState(currentMonthValue)
+const [ownMonthFilter, setOwnMonthFilter] = useState('all')
 const [ownCategoryFilter, setOwnCategoryFilter] = useState('all')
 
 const [jointYearFilter, setJointYearFilter] = useState(currentYearValue)
-const [jointMonthFilter, setJointMonthFilter] = useState(currentMonthValue)
+const [jointMonthFilter, setJointMonthFilter] = useState('all')
 const [jointCategoryFilter, setJointCategoryFilter] = useState('all')
 
 const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
@@ -702,8 +702,9 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     const txMonth = txDate.slice(5, 7)
 
     const matchesYear = !ownYearFilter || txYear === ownYearFilter
-    const matchesMonth = !ownMonthFilter || txMonth === ownMonthFilter
-    const matchesCategory = ownCategoryFilter === 'all' || t.category === ownCategoryFilter
+    const matchesMonth = ownMonthFilter === 'all' || txMonth === ownMonthFilter
+    const matchesCategory =
+      ownCategoryFilter === 'all' || (t.category || 'Other') === ownCategoryFilter
 
     return matchesYear && matchesMonth && matchesCategory
   })
@@ -725,8 +726,9 @@ const jointFilteredTransactions2 = useMemo(() => {
     const txMonth = txDate.slice(5, 7)
 
     const matchesYear = !jointYearFilter || txYear === jointYearFilter
-    const matchesMonth = !jointMonthFilter || txMonth === jointMonthFilter
-    const matchesCategory = jointCategoryFilter === 'all' || t.category === jointCategoryFilter
+    const matchesMonth = jointMonthFilter === 'all' || txMonth === jointMonthFilter
+    const matchesCategory =
+      jointCategoryFilter === 'all' || (t.category || 'Other') === jointCategoryFilter
 
     return matchesYear && matchesMonth && matchesCategory
   })
@@ -868,6 +870,7 @@ const kpiTransactions = useMemo(() => {
 }, [transactions, kpiYear])
 
 const monthOptions = [
+  { value: 'all', label: 'All months' },
   { value: '01', label: 'January' },
   { value: '02', label: 'February' },
   { value: '03', label: 'March' },
@@ -2331,7 +2334,7 @@ async function deleteTransaction(id) {
     className="btn btn-small"
     onClick={() => {
       setOwnYearFilter(currentYearValue)
-      setOwnMonthFilter(currentMonthValue)
+      setOwnMonthFilter('all')
       setOwnCategoryFilter('all')
     }}
   >
@@ -2528,7 +2531,7 @@ async function deleteTransaction(id) {
     className="btn btn-small"
     onClick={() => {
       setJointYearFilter(currentYearValue)
-      setJointMonthFilter(currentMonthValue)
+      setJointMonthFilter('all')
       setJointCategoryFilter('all')
     }}
   >
