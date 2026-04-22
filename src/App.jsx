@@ -190,11 +190,11 @@ const [dateFilter, setDateFilter] = useState('')
 const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
 
 const [ownYearFilter, setOwnYearFilter] = useState(currentYearValue)
-const [ownMonthFilter, setOwnMonthFilter] = useState('all')
+const [ownMonthFilter, setOwnMonthFilter] = useState('')
 const [ownCategoryFilter, setOwnCategoryFilter] = useState('all')
 
 const [jointYearFilter, setJointYearFilter] = useState(currentYearValue)
-const [jointMonthFilter, setJointMonthFilter] = useState('all')
+const [jointMonthFilter, setJointMonthFilter] = useState('')
 const [jointCategoryFilter, setJointCategoryFilter] = useState('all')
 
 const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
