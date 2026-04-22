@@ -2305,10 +2305,11 @@ async function deleteTransaction(id) {
       value={ownMonthFilter}
       onChange={(e) => setOwnMonthFilter(e.target.value)}
     >
-      {monthOptions.map((month) => (
-        <option key={month.value} value={month.value}>
-          {month.label}
-        </option>
+      <option value="">All months</option>
+  {monthOptions.map((month) => (
+    <option key={month.value} value={month.value}>
+      {month.label}
+    </option>
       ))}
     </select>
   </div>
@@ -2334,7 +2335,7 @@ async function deleteTransaction(id) {
     className="btn btn-small"
     onClick={() => {
       setOwnYearFilter(currentYearValue)
-      setOwnMonthFilter('all')
+      setOwnMonthFilter('')
       setOwnCategoryFilter('all')
     }}
   >
@@ -2502,10 +2503,11 @@ async function deleteTransaction(id) {
       value={jointMonthFilter}
       onChange={(e) => setJointMonthFilter(e.target.value)}
     >
-      {monthOptions.map((month) => (
-        <option key={month.value} value={month.value}>
-          {month.label}
-        </option>
+      <option value="">All months</option>
+  {monthOptions.map((month) => (
+    <option key={month.value} value={month.value}>
+      {month.label}
+    </option>
       ))}
     </select>
   </div>
@@ -2531,7 +2533,7 @@ async function deleteTransaction(id) {
     className="btn btn-small"
     onClick={() => {
       setJointYearFilter(currentYearValue)
-      setJointMonthFilter('all')
+      setJointMonthFilter('')
       setJointCategoryFilter('all')
     }}
   >
