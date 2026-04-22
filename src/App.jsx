@@ -702,7 +702,7 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     const txMonth = txDate.slice(5, 7)
 
     const matchesYear = !ownYearFilter || txYear === ownYearFilter
-    const matchesMonth = ownMonthFilter === 'all' || txMonth === ownMonthFilter
+    const matchesMonth = !ownMonthFilter || ownMonthFilter === 'all' || txMonth === ownMonthFilter
     const matchesCategory =
       ownCategoryFilter === 'all' || (t.category || 'Other') === ownCategoryFilter
 
@@ -726,7 +726,7 @@ const jointFilteredTransactions2 = useMemo(() => {
     const txMonth = txDate.slice(5, 7)
 
     const matchesYear = !jointYearFilter || txYear === jointYearFilter
-    const matchesMonth = jointMonthFilter === 'all' || txMonth === jointMonthFilter
+    const matchesMonth = !jointMonthFilter || jointMonthFilter === 'all' || txMonth === jointMonthFilter
     const matchesCategory =
       jointCategoryFilter === 'all' || (t.category || 'Other') === jointCategoryFilter
 
