@@ -195,8 +195,6 @@ const [jointDateFilter, setJointDateFilter] = useState(currentYearMonthStart)
 const [jointCategoryFilter, setJointCategoryFilter] = useState('all')
 
 const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
-
-const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({
     date: '',
