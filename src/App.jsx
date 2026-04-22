@@ -1725,36 +1725,101 @@ async function saveEdit(id) {
   }
 
   const updatedTransaction = {
-  ...original,
-  date: editDraft.date,
-  description: editDraft.description.trim() || original.description,
-  merchant: editDraft.description.trim() || original.merchant,
-  category: editDraft.category || 'Other',
-  amount,
-  split: original.splitPaid ? false : Boolean(editDraft.split),
-  splitPaid: Boolean(original.splitPaid),
-  splitDirection: original.splitPaid
-    ? original.splitDirection
-    : (Boolean(editDraft.split)
-        ? (original.splitDirection || getSplitDirectionForUser(user, original) || 'owed_to_me')
-        : null),
-  splitGroupId: original.splitPaid
-    ? original.splitGroupId
-    : (Boolean(editDraft.split)
-        ? (original.splitGroupId || makeSplitGroupId(original))
-        : null),
-  joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
-  jointMode: null,
-  account: original.account === 'joint'
-    ? 'joint'
-    : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
-}
+    ...original,
+    date: editDraft.date,
+    description: editDraft.description.trim() || original.description,
+    merchant: editDraft.description.trim() || original.merchant,
+    category: editDraft.category || 'Other',
+    amount,
+    split: original.splitPaid ? false : Boolean(editDraft.split),
+    splitDirection: original.splitPaid
+      ? null
+      : (Boolean(editDraft.split) ? 'owed_to_me' : null),
+    splitPaid: Boolean(original.splitPaid),
+    joint: original.account === 'joint' ? true : Boolean(editDraft.joint),
+    jointMode: null,
+    account: original.account === 'joint'
+      ? 'joint'
+      : (Boolean(editDraft.joint) ? 'joint' : 'personal'),
+  }
 
   if (user) {
     const error = await updateTransactionInCloud(updatedTransaction, user)
     if (error) {
       setStatus(`Cloud save failed: ${error.message}`)
       return
+    }
+
+    const partnerId =
+      original.sharedWithUserId ||
+      getPartnerUserId(user)
+
+    const shouldSyncPartner =
+      Boolean(partnerId) &&
+      (
+        Boolean(original.jointGroupId) ||
+        Boolean(original.joint) ||
+        original.account === 'joint' ||
+        Boolean(updatedTransaction.joint)
+      )
+
+    if (shouldSyncPartner) {
+      const { data: partnerRows, error: partnerFetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('userid', partnerId)
+        .or(
+          [
+            original.jointGroupId ? `joint_group_id.eq.${original.jointGroupId}` : null,
+            `description.eq.${original.description}`
+          ]
+            .filter(Boolean)
+            .join(',')
+        )
+        .order('id', { ascending: false })
+        .limit(10)
+
+      if (partnerFetchError) {
+        setStatus(`Partner fetch failed: ${partnerFetchError.message}`)
+        return
+      }
+
+      const partnerMatch =
+        (partnerRows || []).find((row) =>
+          original.jointGroupId
+            ? row.joint_group_id === original.jointGroupId
+            : (
+                row.description === original.description &&
+                Math.abs(Number(row.amount || 0) - Number(original.amount || 0)) < 0.0001
+              )
+        )
+
+      if (partnerMatch) {
+        const partnerPayload = {
+          date: updatedTransaction.date,
+          description: updatedTransaction.description,
+          merchant: updatedTransaction.description,
+          category: updatedTransaction.category,
+          amount: updatedTransaction.amount,
+          split: updatedTransaction.split,
+          splitpaid: updatedTransaction.splitPaid,
+          split_direction: updatedTransaction.split ? 'i_owe' : null,
+          joint: updatedTransaction.joint,
+          joint_mode: updatedTransaction.jointMode,
+          account: updatedTransaction.account,
+        }
+
+        const { error: partnerUpdateError } = await supabase
+          .from('transactions')
+          .update(partnerPayload)
+          .eq('id', partnerMatch.id)
+          .eq('userid', partnerId)
+
+        if (partnerUpdateError) {
+          setStatus(`Partner update failed: ${partnerUpdateError.message}`)
+          return
+        }
+      }
     }
   }
 
@@ -1773,6 +1838,9 @@ async function saveEdit(id) {
     })
   )
 
+  await loadTransactionsFromCloud(user)
+  if (user) await loadPartnerData(user)
+
   if (categoryChanged && originalDescription) {
     const matchCount = transactions.filter(
       (t) => t.id !== id && t.description === originalDescription
@@ -1783,10 +1851,10 @@ async function saveEdit(id) {
         `Updated. Category ${editDraft.category || 'Other'} applied to ${matchCount + 1} transactions with description "${originalDescription}".`
       )
     } else {
-      setStatus('Transaction updated.')
+      setStatus('Transaction updated for both users.')
     }
   } else {
-    setStatus('Transaction updated.')
+    setStatus('Transaction updated for both users.')
   }
 
   cancelEdit()
