@@ -592,8 +592,6 @@ const jointFilteredTransactions2 = useMemo(() => {
     [myTransactions]
   )
 
-  const ownTabTransactions = ownFilteredByMonthTransactions
-
 const ownTabCategoryData = useMemo(() => {
   const totals = new Map()
 
@@ -633,7 +631,7 @@ const jointTabCategoryData = useMemo(() => {
 
   jointTabTransactions.forEach((t) => {
     const key = t.category || 'Other'
-    totals.set(key, (totals.get(key) || 0) + Math.abs(Number(t.jointAmount ?? t.amount || 0)))
+    totals.set(key, (totals.get(key) || 0) + Math.abs(Number((t.jointAmount ?? t.amount) || 0)))
   })
 
   return [...totals.entries()]
@@ -647,7 +645,7 @@ const jointTabMonthData = useMemo(() => {
   jointTabTransactions.forEach((t) => {
     const month = getMonthKey(t.date)
     if (!month) return
-    totals.set(month, (totals.get(month) || 0) + Math.abs(Number(t.jointAmount ?? t.amount || 0)))
+    totals.set(month, (totals.get(month) || 0) + Math.abs(Number((t.jointAmount ?? t.amount) || 0)))
   })
 
   return [...totals.entries()]
@@ -656,7 +654,7 @@ const jointTabMonthData = useMemo(() => {
 }, [jointTabTransactions])
 
 const jointTabTotal = useMemo(
-  () => jointTabTransactions.reduce((sum, t) => sum + Math.abs(Number(t.jointAmount ?? t.amount || 0)), 0),
+  () => jointTabTransactions.reduce((sum, t) => sum + Math.abs(Number((t.jointAmount ?? t.amount) || 0)), 0),
   [jointTabTransactions]
 )
 
@@ -2700,7 +2698,7 @@ async function deleteTransaction(id) {
                       <span>{t.category}</span>
                     </div>
                   </div>
-                  <div className="tx-mobile-amount">{fmtEUR(t.jointAmount ?? t.amount || 0)}</div>
+                  <div className="tx-mobile-amount">{fmtEUR((t.jointAmount ?? t.amount) || 0)}</div>
                 </div>
               </div>
             ))}
@@ -2726,7 +2724,7 @@ async function deleteTransaction(id) {
                     <td>{t.date}</td>
                     <td><span className="muted">{t.description}</span></td>
                     <td>{t.category}</td>
-                    <td className="amount">{fmtEUR(t.jointAmount ?? t.amount || 0)}</td>
+                    <td className="amount">{fmtEUR((t.jointAmount ?? t.amount) || 0)}</td>
                     <td>
                       <button
                         type="button"
