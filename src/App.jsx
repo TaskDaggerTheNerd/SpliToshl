@@ -2126,28 +2126,93 @@ async function deleteTransaction(id) {
             <div className="grid-2">
               <div className="panel">
                 <h2>Own Transactions ({sortedTransactions.length})</h2>
-                <div className="table-wrap">
-  <table className="data-table">
-    <thead>
-      <tr>
-        <th onClick={() => handleSort('date')}>Date</th>
-        <th onClick={() => handleSort('description')}>Description</th>
-        <th onClick={() => handleSort('category')}>Category</th>
-        <th onClick={() => handleSort('amount')}>Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      {sortedTransactions.map((t) => (
-        <tr key={t.id}>
-          <td>{t.date}</td>
-          <td>{t.description}</td>
-          <td>{t.category}</td>
-          <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+                {isMobile ? (
+  <div className="tx-mobile-list">
+    {sortedTransactions.map((t) => (
+      <div key={t.id} className="tx-mobile-card">
+        <div className="tx-mobile-top">
+          <div className="tx-mobile-main">
+            <div className="tx-mobile-desc">{t.description}</div>
+            <div className="tx-mobile-meta">
+              <span>{t.date}</span>
+              <span>•</span>
+              <span>{t.category}</span>
+            </div>
+          </div>
+          <div className="tx-mobile-amount">{fmtEUR(t.myAmount || 0)}</div>
+        </div>
+
+        <div className="tx-mobile-actions">
+          <button
+            type="button"
+            className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+            onClick={() => toggleSplit(t.id)}
+            disabled={
+              t.splitPaid ||
+              (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+            }
+            title={
+              t.splitPaid
+                ? 'Already paid'
+                : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                  ? 'This split was set by the other user and cannot be changed here'
+                  : ''
+            }
+          >
+            {t.splitPaid ? 'Already Paid' : t.split ? 'Split: Yes' : 'Split: No'}
+          </button>
+
+          <button
+            type="button"
+            className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
+            onClick={() => handleJointToggle(t)}
+          >
+            {t.joint || t.account === 'joint' ? 'Joint: Yes' : 'Joint: No'}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={() => startEdit(t)}
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={() => deleteTransaction(t.id)}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+) : (
+  <div className="table-wrap">
+    <table className="data-table">
+      <thead>
+        <tr>
+          <th onClick={() => handleSort('date')}>Date</th>
+          <th onClick={() => handleSort('description')}>Description</th>
+          <th onClick={() => handleSort('category')}>Category</th>
+          <th onClick={() => handleSort('amount')}>Amount</th>
         </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+      </thead>
+      <tbody>
+        {sortedTransactions.map((t) => (
+          <tr key={t.id}>
+            <td>{t.date}</td>
+            <td>{t.description}</td>
+            <td>{t.category}</td>
+            <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
               </div>
 
               <div className="panel">
