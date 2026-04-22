@@ -2645,39 +2645,93 @@ async function deleteTransaction(id) {
           </div>
         ))}
 
-      {activeTab === 'Transactions' &&
-        (!hasData ? (
-          <EmptyState />
-        ) : (
-          <div className="panel">
-            <h2>Transactions ({sortedTransactions.length})</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th onClick={() => handleSort('date')}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+{activeTab === 'Transactions' &&
+  (!hasData ? (
+    <EmptyState />
+  ) : (
+    <div className="panel">
+      <h2>Transactions ({sortedTransactions.length})</h2>
+
+      {isMobile ? (
+        <>
+          <div className="transactions-mobile-filters">
+            <div className="field-group">
+              <span>Date</span>
+              <input
+                className="field-input"
+                type="month"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+              />
+            </div>
+
+            <div className="field-group">
+              <span>Category</span>
+              <select
+                className="field-input"
+                value={transactionCategoryFilter}
+                onChange={(e) => setTransactionCategoryFilter(e.target.value)}
+              >
+                <option value="all">All categories</option>
+                {categoryOptions.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={() => {
+                setDateFilter('')
+                setTransactionCategoryFilter('all')
+              }}
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          <div className="tx-mobile-list">
+            {sortedTransactions.map((t) => {
+              const isEditing = editingId === t.id
+
+              return (
+                <div
+                  key={t.id}
+                  className={`tx-mobile-card ${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''} ${isEditing ? 'editing-row' : ''}`.trim()}
+                >
+                  {isEditing ? (
+                    <div className="tx-mobile-edit">
+                      <div className="field-group">
                         <span>Date</span>
                         <input
                           className="field-input"
-                          type="month"
-                          value={dateFilter}
-                          onChange={(e) => setDateFilter(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
+                          type="date"
+                          value={editDraft.date}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
                         />
                       </div>
-                    </th>
-                    <th onClick={() => handleSort('description')}>Description</th>
-                    <th onClick={() => handleSort('category')}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+
+                      <div className="field-group">
+                        <span>Description</span>
+                        <input
+                          className="field-input"
+                          type="text"
+                          value={editDraft.description}
+                          placeholder="Description"
+                          onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="field-group">
                         <span>Category</span>
                         <select
                           className="field-input"
-                          value={transactionCategoryFilter}
-                          onChange={(e) => setTransactionCategoryFilter(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
+                          value={editDraft.category}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, category: e.target.value }))}
                         >
-                          <option value="all">All categories</option>
                           {categoryOptions.map((cat) => (
                             <option key={cat} value={cat}>
                               {cat}
@@ -2685,149 +2739,111 @@ async function deleteTransaction(id) {
                           ))}
                         </select>
                       </div>
-                    </th>
-                    <th onClick={() => handleSort('amount')}>Amount</th>
-                    <th>Split</th>
-                    <th>Joint?</th>
-                    <th>
-                      <button
-                        type="button"
-                        className="btn btn-small"
-                        onClick={() => {
-                          setDateFilter('')
-                          setTransactionCategoryFilter('all')
-                        }}
-                      >
-                        Clear
-                      </button>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedTransactions.map((t) => {
-                    const isEditing = editingId === t.id
-                    return (
-                      <tr
-                        key={t.id}
-                        className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''} ${isEditing ? 'editing-row' : ''}`.trim()}
-                      >
-                        <td>
-                          {isEditing ? (
-                            <input
-                              className="field-input"
-                              type="date"
-                              value={editDraft.date}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
-                            />
-                          ) : (
-                            t.date
-                          )}
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <input
-                              className="field-input"
-                              type="text"
-                              value={editDraft.description}
-                              placeholder="Description"
-                              onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
-                            />
-                          ) : (
-                            <span className="muted">{t.description}</span>
-                          )}
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <select
-                              className="field-input"
-                              value={editDraft.category}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, category: e.target.value }))}
+
+                      <div className="field-group">
+                        <span>Amount</span>
+                        <input
+                          className="field-input amount-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editDraft.amount}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="field-group">
+                        <span>Split</span>
+                        <select
+                          className="field-input"
+                          value={editDraft.split ? 'yes' : 'no'}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, split: e.target.value === 'yes' }))}
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </div>
+
+                      <div className="field-group">
+                        <span>Joint?</span>
+                        <select
+                          className="field-input"
+                          value={t.account === 'joint' || editDraft.joint ? 'yes' : 'no'}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, joint: e.target.value === 'yes' }))}
+                          disabled={t.account === 'joint'}
+                          title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </div>
+
+                      <div className="tx-mobile-actions">
+                        <button
+                          type="button"
+                          className="btn btn-small btn-primary"
+                          onClick={() => saveEdit(t.id)}
+                        >
+                          Save
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-small"
+                          onClick={cancelEdit}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="tx-mobile-top">
+                        <div className="tx-mobile-main">
+                          <div className="tx-mobile-desc">{t.description}</div>
+                          <div className="tx-mobile-meta">
+                            <span>{t.date}</span>
+                            <span>•</span>
+                            <span>{t.category}</span>
+                          </div>
+                        </div>
+                        <div className="tx-mobile-amount">{fmtEUR(t.amount || 0)}</div>
+                      </div>
+
+                      <div className="tx-mobile-details">
+                        <div className="tx-mobile-detail-row">
+                          <span>Split</span>
+                          <div className="tx-mobile-detail-value">
+                            <button
+                              type="button"
+                              className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+                              onClick={() => toggleSplit(t.id)}
+                              disabled={
+                                t.splitPaid ||
+                                (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                              }
+                              title={
+                                t.splitPaid
+                                  ? 'Already paid'
+                                  : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                                    ? 'This split was set by the other user and cannot be changed here'
+                                    : ''
+                              }
                             >
-                              {categoryOptions.map((cat) => (
-                                <option key={cat} value={cat}>
-                                  {cat}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            t.category
-                          )}
-                        </td>
-                        <td className="amount">
-                          {isEditing ? (
-                            <input
-                              className="field-input amount-input"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={editDraft.amount}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))}
-                            />
-                          ) : (
-                            fmtEUR(t.amount || 0)
-                          )}
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <select
-                              className="field-input"
-                              value={editDraft.split ? 'yes' : 'no'}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, split: e.target.value === 'yes' }))}
-                            >
-                              <option value="no">No</option>
-                              <option value="yes">Yes</option>
-                            </select>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-<button
-  type="button"
-  className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
-  onClick={() => toggleSplit(t.id)}
-  disabled={
-    t.splitPaid ||
-    (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-  }
-  title={
-    t.splitPaid
-      ? 'Already paid'
-      : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-        ? 'This split was set by the other user and cannot be changed here'
-        : ''
-  }
->
-  {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
-</button>
-                              {t.splitPaid && (
-                                <span
-                                  style={{
-                                    fontSize: '0.72rem',
-                                    padding: '0.2rem 0.45rem',
-                                    borderRadius: '999px',
-                                    background: 'var(--color-warning-highlight)',
-                                    color: 'var(--color-warning)',
-                                    whiteSpace: 'nowrap',
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Already Paid
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <select
-                              className="field-input"
-                              value={t.account === 'joint' || editDraft.joint ? 'yes' : 'no'}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, joint: e.target.value === 'yes' }))}
-                              disabled={t.account === 'joint'}
-                              title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
-                            >
-                              <option value="no">No</option>
-                              <option value="yes">Yes</option>
-                            </select>
-                          ) : (
+                              {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
+                            </button>
+
+                            {t.splitPaid && (
+                              <span className="paid-badge-mobile">
+                                Already Paid
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="tx-mobile-detail-row">
+                          <span>Joint?</span>
+                          <div className="tx-mobile-detail-value">
                             <button
                               type="button"
                               className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
@@ -2835,39 +2851,253 @@ async function deleteTransaction(id) {
                             >
                               {t.joint || t.account === 'joint' ? 'Yes' : 'No'}
                             </button>
-                          )}
-                        </td>
-                        <td>
-                          <div className="row-actions">
-                            {isEditing ? (
-                              <>
-                                <button type="button" className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
-                                  Save
-                                </button>
-                                <button type="button" className="btn btn-small" onClick={cancelEdit}>
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button type="button" className="btn btn-small" onClick={() => startEdit(t)}>
-                                  Edit
-                                </button>
-                                <button type="button" className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
-                                  Delete
-                                </button>
-                              </>
-                            )}
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+
+                      <div className="tx-mobile-actions">
+                        <button
+                          type="button"
+                          className="btn btn-small"
+                          onClick={() => startEdit(t)}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-small btn-danger"
+                          onClick={() => deleteTransaction(t.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
-        ))}
+        </>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th onClick={() => handleSort('date')}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <span>Date</span>
+                    <input
+                      className="field-input"
+                      type="month"
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('description')}>Description</th>
+                <th onClick={() => handleSort('category')}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <span>Category</span>
+                    <select
+                      className="field-input"
+                      value={transactionCategoryFilter}
+                      onChange={(e) => setTransactionCategoryFilter(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value="all">All categories</option>
+                      {categoryOptions.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </th>
+                <th onClick={() => handleSort('amount')}>Amount</th>
+                <th>Split</th>
+                <th>Joint?</th>
+                <th>
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    onClick={() => {
+                      setDateFilter('')
+                      setTransactionCategoryFilter('all')
+                    }}
+                  >
+                    Clear
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedTransactions.map((t) => {
+                const isEditing = editingId === t.id
+                return (
+                  <tr
+                    key={t.id}
+                    className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''} ${isEditing ? 'editing-row' : ''}`.trim()}
+                  >
+                    <td>
+                      {isEditing ? (
+                        <input
+                          className="field-input"
+                          type="date"
+                          value={editDraft.date}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
+                        />
+                      ) : (
+                        t.date
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          className="field-input"
+                          type="text"
+                          value={editDraft.description}
+                          placeholder="Description"
+                          onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                        />
+                      ) : (
+                        <span className="muted">{t.description}</span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select
+                          className="field-input"
+                          value={editDraft.category}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, category: e.target.value }))}
+                        >
+                          {categoryOptions.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        t.category
+                      )}
+                    </td>
+                    <td className="amount">
+                      {isEditing ? (
+                        <input
+                          className="field-input amount-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editDraft.amount}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))}
+                        />
+                      ) : (
+                        fmtEUR(t.amount || 0)
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select
+                          className="field-input"
+                          value={editDraft.split ? 'yes' : 'no'}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, split: e.target.value === 'yes' }))}
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+                            onClick={() => toggleSplit(t.id)}
+                            disabled={
+                              t.splitPaid ||
+                              (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                            }
+                            title={
+                              t.splitPaid
+                                ? 'Already paid'
+                                : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                                  ? 'This split was set by the other user and cannot be changed here'
+                                  : ''
+                            }
+                          >
+                            {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
+                          </button>
+                          {t.splitPaid && (
+                            <span
+                              style={{
+                                fontSize: '0.72rem',
+                                padding: '0.2rem 0.45rem',
+                                borderRadius: '999px',
+                                background: 'var(--color-warning-highlight)',
+                                color: 'var(--color-warning)',
+                                whiteSpace: 'nowrap',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Already Paid
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select
+                          className="field-input"
+                          value={t.account === 'joint' || editDraft.joint ? 'yes' : 'no'}
+                          onChange={(e) => setEditDraft((p) => ({ ...p, joint: e.target.value === 'yes' }))}
+                          disabled={t.account === 'joint'}
+                          title={t.account === 'joint' ? 'Already from a Joint statement' : ''}
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
+                          onClick={() => handleJointToggle(t)}
+                        >
+                          {t.joint || t.account === 'joint' ? 'Yes' : 'No'}
+                        </button>
+                      )}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {isEditing ? (
+                          <>
+                            <button type="button" className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
+                              Save
+                            </button>
+                            <button type="button" className="btn btn-small" onClick={cancelEdit}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" className="btn btn-small" onClick={() => startEdit(t)}>
+                              Edit
+                            </button>
+                            <button type="button" className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  ))}
 
       {activeTab === 'Splits' &&
         (splitRows.length === 0 ? (

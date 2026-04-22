@@ -943,3 +943,52 @@ table {
   color: var(--color-text);
   white-space: nowrap;
 }
+
+.transactions-mobile-filters {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.tx-mobile-edit {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tx-mobile-details {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.tx-mobile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--color-divider);
+}
+
+.tx-mobile-detail-row span {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.tx-mobile-detail-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.paid-badge-mobile {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: var(--color-warning-highlight);
+  color: var(--color-warning);
+  white-space: nowrap;
+  font-weight: 600;
+}
