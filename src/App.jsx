@@ -182,9 +182,19 @@ export default function App() {
   const [status, setStatus] = useState('Import a CSV or Excel .xlsx file to start.')
   const [darkMode, setDarkMode] = useState(window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
-  const [dateFilter, setDateFilter] = useState('')
-  const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
-  const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
+  const currentMonth = new Date().toISOString().slice(0, 7)
+const currentYearMonthStart = `${new Date().getFullYear()}-01`
+
+const [dateFilter, setDateFilter] = useState('')
+const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
+
+const [ownDateFilter, setOwnDateFilter] = useState(currentYearMonthStart)
+const [ownCategoryFilter, setOwnCategoryFilter] = useState('all')
+
+const [jointDateFilter, setJointDateFilter] = useState(currentYearMonthStart)
+const [jointCategoryFilter, setJointCategoryFilter] = useState('all')
+
+const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({
     date: '',
@@ -678,6 +688,139 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     const safeIdx = idx === -1 ? 0 : idx
     return PALETTE[safeIdx % PALETTE.length]
   }
+
+  const ownFilteredTransactions = useMemo(() => {
+  return transactions.filter((t) => {
+    const isJointTx = t.joint || t.account === 'joint'
+    if (isJointTx) return false
+
+    const matchesDate = !ownDateFilter || String(t.date || '').startsWith(ownDateFilter.slice(0, 4))
+    const matchesCategory = ownCategoryFilter === 'all' || t.category === ownCategoryFilter
+
+    if (ownDateFilter && ownDateFilter.length === 7) {
+      const selectedYear = ownDateFilter.slice(0, 4)
+      const matchesYear = String(t.date || '').startsWith(selectedYear)
+      if (!matchesYear) return false
+    }
+
+    return matchesCategory
+  })
+}, [transactions, ownDateFilter, ownCategoryFilter])
+
+const ownFilteredByMonthTransactions = useMemo(() => {
+  if (!ownDateFilter) return ownFilteredTransactions
+
+  if (ownDateFilter.length === 7) {
+    return ownFilteredTransactions.filter((t) =>
+      String(t.date || '').startsWith(ownDateFilter.slice(0, 4))
+    )
+  }
+
+  return ownFilteredTransactions
+}, [ownFilteredTransactions, ownDateFilter])
+
+const jointBaseTransactions = useMemo(
+  () => transactions.filter((t) => t.joint || t.account === 'joint'),
+  [transactions]
+)
+
+const jointFilteredTransactions2 = useMemo(() => {
+  return jointBaseTransactions.filter((t) => {
+    const matchesCategory = jointCategoryFilter === 'all' || t.category === jointCategoryFilter
+
+    if (jointDateFilter && jointDateFilter.length === 7) {
+      const selectedYear = jointDateFilter.slice(0, 4)
+      const matchesYear = String(t.date || '').startsWith(selectedYear)
+      if (!matchesYear) return false
+    }
+
+    return matchesCategory
+  })
+}, [jointBaseTransactions, jointDateFilter, jointCategoryFilter])
+
+const ownTabTransactions = ownFilteredByMonthTransactions
+
+const ownTabCategoryData = useMemo(() => {
+  const totals = new Map()
+
+  ownTabTransactions.forEach((t) => {
+    const key = t.category || 'Other'
+    totals.set(key, (totals.get(key) || 0) + Math.abs(Number(t.amount || 0)))
+  })
+
+  return [...totals.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+}, [ownTabTransactions])
+
+const ownTabMonthData = useMemo(() => {
+  const totals = new Map()
+
+  ownTabTransactions.forEach((t) => {
+    const month = getMonthKey(t.date)
+    if (!month) return
+    totals.set(month, (totals.get(month) || 0) + Math.abs(Number(t.amount || 0)))
+  })
+
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => ({ name, value }))
+}, [ownTabTransactions])
+
+const ownTabTotal = useMemo(
+  () => ownTabTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0),
+  [ownTabTransactions]
+)
+
+const jointTabTransactions = jointFilteredTransactions2
+
+const jointTabCategoryData = useMemo(() => {
+  const totals = new Map()
+
+  jointTabTransactions.forEach((t) => {
+    const key = t.category || 'Other'
+    totals.set(key, (totals.get(key) || 0) + Math.abs(Number(t.jointAmount ?? t.amount || 0)))
+  })
+
+  return [...totals.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+}, [jointTabTransactions])
+
+const jointTabMonthData = useMemo(() => {
+  const totals = new Map()
+
+  jointTabTransactions.forEach((t) => {
+    const month = getMonthKey(t.date)
+    if (!month) return
+    totals.set(month, (totals.get(month) || 0) + Math.abs(Number(t.jointAmount ?? t.amount || 0)))
+  })
+
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => ({ name, value }))
+}, [jointTabTransactions])
+
+const jointTabTotal = useMemo(
+  () => jointTabTransactions.reduce((sum, t) => sum + Math.abs(Number(t.jointAmount ?? t.amount || 0)), 0),
+  [jointTabTransactions]
+)
+
+const ownCategoryOptions = useMemo(() => {
+  return [...new Set(
+    transactions
+      .filter((t) => !(t.joint || t.account === 'joint'))
+      .map((t) => t.category || 'Other')
+  )].sort()
+}, [transactions])
+
+const jointCategoryOptions = useMemo(() => {
+  return [...new Set(
+    transactions
+      .filter((t) => t.joint || t.account === 'joint')
+      .map((t) => t.category || 'Other')
+  )].sort()
+}, [transactions])
 
   const availableYears = useMemo(() => {
   const years = [
@@ -2088,333 +2231,357 @@ async function deleteTransaction(id) {
     <EmptyState />
   ) : (
     <>
-      <div className="grid-2">
-        <div className="panel">
-          <h2>Spending by Category</h2>
-          <ResponsiveContainer width="100%" height={pieHeight}>
-            <PieChart>
-              <Pie
-                data={categoryData}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={90}
-                label={({ name, percent }) => `${name} ${fmtNumber(percent * 100, 0)}%`}
-              >
-                {categoryData.map((d) => (
-                  <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                ))}
-              </Pie>
-              <Tooltip {...tt} />
-            </PieChart>
-          </ResponsiveContainer>
+      <div className="panel">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <h2>Own Overview</h2>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-small" onClick={handlePDF}>
+              Export PDF
+            </button>
+          </div>
         </div>
 
-        <div className="panel">
-          <h2>Monthly Spend</h2>
-          <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={monthData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-              <XAxis dataKey="name" tick={axisTick} />
-              <YAxis tick={axisTick} />
-              <Tooltip {...tt} />
-              <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        <div className="transactions-mobile-filters own-joint-filters" style={{ marginTop: '1rem' }}>
+          <div className="field-group">
+            <span>Date</span>
+            <input
+              className="field-input"
+              type="month"
+              value={ownDateFilter}
+              onChange={(e) => setOwnDateFilter(e.target.value)}
+            />
+          </div>
 
-      {isMobile ? (
-        <>
-          <div className="panel own-summary-mobile">
-  <h2>Own Summary</h2>
-  <div className="summary-mobile-list">
-    <div className="summary-mobile-row">
-      <span>Total Own Spend</span>
-      <strong>{fmtEUR(myTotalSpend)}</strong>
-    </div>
-    <div className="summary-mobile-row">
-      <span>Transactions</span>
-      <strong>{fmtInt(filtered.length)}</strong>
-    </div>
-    <div className="summary-mobile-row">
-      <span>Categories</span>
-      <strong>{fmtInt(categoryData.length)}</strong>
-    </div>
-
-    {categoryData.map((row) => (
-      <div key={row.name} className="summary-mobile-row">
-        <span>{row.name}</span>
-        <strong>{fmtEUR(row.value)}</strong>
-      </div>
-    ))}
-  </div>
-</div>
-
-          <div className="panel">
-            <h2>Own Transactions ({sortedTransactions.length})</h2>
-            <div className="tx-mobile-list">
-              {sortedTransactions.map((t) => (
-                <div key={t.id} className="tx-mobile-card">
-                  <div className="tx-mobile-top">
-                    <div className="tx-mobile-main">
-                      <div className="tx-mobile-desc">{t.description}</div>
-                      <div className="tx-mobile-meta">
-                        <span>{t.date}</span>
-                        <span>•</span>
-                        <span>{t.category}</span>
-                      </div>
-                    </div>
-                    <div className="tx-mobile-amount">{fmtEUR(t.myAmount || 0)}</div>
-                  </div>
-
-                  <div className="tx-mobile-actions">
-                    <button
-                      type="button"
-                      className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
-                      onClick={() => toggleSplit(t.id)}
-                      disabled={
-                        t.splitPaid ||
-                        (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                      }
-                      title={
-                        t.splitPaid
-                          ? 'Already paid'
-                          : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                            ? 'This split was set by the other user and cannot be changed here'
-                            : ''
-                      }
-                    >
-                      {t.splitPaid ? 'Already Paid' : t.split ? 'Split: Yes' : 'Split: No'}
-                    </button>
-
-                    <button
-                      type="button"
-                      className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
-                      onClick={() => handleJointToggle(t)}
-                    >
-                      {t.joint || t.account === 'joint' ? 'Joint: Yes' : 'Joint: No'}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-quiet"
-                      onClick={() => startEdit(t)}
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-quiet"
-                      onClick={() => deleteTransaction(t.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
+          <div className="field-group">
+            <span>Category</span>
+            <select
+              className="field-input"
+              value={ownCategoryFilter}
+              onChange={(e) => setOwnCategoryFilter(e.target.value)}
+            >
+              <option value="all">All categories</option>
+              {ownCategoryOptions.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="grid-2">
-          <div className="panel">
-            <h2>Own Transactions ({sortedTransactions.length})</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th onClick={() => handleSort('date')}>Date</th>
-                    <th onClick={() => handleSort('description')}>Description</th>
-                    <th onClick={() => handleSort('category')}>Category</th>
-                    <th onClick={() => handleSort('amount')}>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedTransactions.map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.date}</td>
-                      <td>{t.description}</td>
-                      <td>{t.category}</td>
-                      <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            </select>
           </div>
 
-          <div className="panel">
-            <h2>Own Summary</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <tbody>
-                  <tr>
-                    <td>Total Own Spend</td>
-                    <td className="amount">{fmtEUR(myTotalSpend)}</td>
-                  </tr>
-                  <tr>
-                    <td>Transactions</td>
-                    <td className="amount">{fmtInt(filtered.length)}</td>
-                  </tr>
-                  <tr>
-                    <td>Categories</td>
-                    <td className="amount">{fmtInt(categoryData.length)}</td>
-                  </tr>
-                  {categoryData.map((row) => (
-                    <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td className="amount">{fmtEUR(row.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              setOwnDateFilter(currentYearMonthStart)
+              setOwnCategoryFilter('all')
+            }}
+          >
+            Clear Filters
+          </button>
         </div>
-      )}
+      </div>
+
+      <div className="kpis">
+        <article className="kpi-card">
+          <span className="label">Filtered spend</span>
+          <strong>{fmtEUR(ownTabTotal)}</strong>
+        </article>
+        <article className="kpi-card">
+          <span className="label">Transactions</span>
+          <strong>{fmtInt(ownTabTransactions.length)}</strong>
+        </article>
+      </div>
+
+      <div className="grid-2">
+        <section className="panel chart-panel">
+          <h2>Own by Category</h2>
+          {ownTabCategoryData.length === 0 ? (
+            <EmptyState message="No transactions match the selected filters." />
+          ) : (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie
+                    data={ownTabCategoryData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={110}
+                    innerRadius={55}
+                    paddingAngle={2}
+                  >
+                    {ownTabCategoryData.map((entry, index) => (
+                      <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => fmtEUR(value)} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
+
+        <section className="panel chart-panel">
+          <h2>Own by Month</h2>
+          {ownTabMonthData.length === 0 ? (
+            <EmptyState message="No monthly data for the selected filters." />
+          ) : (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={ownTabMonthData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => fmtNumber(value)} />
+                  <Tooltip formatter={(value) => fmtEUR(value)} />
+                  <Bar dataKey="value" fill="var(--color-primary)" radius={[10, 10, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="panel">
+        <h2>Own Transactions ({ownTabTransactions.length})</h2>
+        {ownTabTransactions.length === 0 ? (
+          <EmptyState message="No transactions match the selected filters." />
+        ) : isMobile ? (
+          <div className="tx-mobile-list">
+            {ownTabTransactions.map((t) => (
+              <div
+                key={t.id}
+                className={`tx-mobile-card ${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''}`.trim()}
+              >
+                <div className="tx-mobile-top">
+                  <div className="tx-mobile-main">
+                    <div className="tx-mobile-desc">{t.description}</div>
+                    <div className="tx-mobile-meta">
+                      <span>{t.date}</span>
+                      <span>•</span>
+                      <span>{t.category}</span>
+                    </div>
+                  </div>
+                  <div className="tx-mobile-amount">{fmtEUR(t.amount || 0)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th>Amount</th>
+                  <th>Split</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ownTabTransactions.map((t) => (
+                  <tr
+                    key={t.id}
+                    className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''}`.trim()}
+                  >
+                    <td>{t.date}</td>
+                    <td><span className="muted">{t.description}</span></td>
+                    <td>{t.category}</td>
+                    <td className="amount">{fmtEUR(t.amount || 0)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+                        disabled
+                      >
+                        {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </>
   ))}
 
-      {activeTab === 'Joint' &&
+{activeTab === 'Joint' &&
   (!hasData ? (
-    <EmptyState message="Import a joint account statement to see joint costs." />
-  ) : jointTransactions.length === 0 ? (
-    <EmptyState message="No joint transactions detected yet." />
+    <EmptyState />
   ) : (
     <>
-      <div className="grid-2">
-        <div className="panel">
-          <h2>Joint Spending by Category</h2>
-          <ResponsiveContainer width="100%" height={pieHeight}>
-            <PieChart>
-              <Pie
-                data={jointCategoryData}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={90}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {jointCategoryData.map((d) => (
-                  <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                ))}
-              </Pie>
-              <Tooltip {...tt} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="panel">
+        <h2>Joint Overview</h2>
 
-        <div className="panel">
-          <h2>Joint Monthly Spend</h2>
-          <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={jointMonthData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-              <XAxis dataKey="name" tick={axisTick} />
-              <YAxis tick={axisTick} />
-              <Tooltip {...tt} />
-              <Bar dataKey="value" fill="#264653" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="transactions-mobile-filters own-joint-filters" style={{ marginTop: '1rem' }}>
+          <div className="field-group">
+            <span>Date</span>
+            <input
+              className="field-input"
+              type="month"
+              value={jointDateFilter}
+              onChange={(e) => setJointDateFilter(e.target.value)}
+            />
+          </div>
+
+          <div className="field-group">
+            <span>Category</span>
+            <select
+              className="field-input"
+              value={jointCategoryFilter}
+              onChange={(e) => setJointCategoryFilter(e.target.value)}
+            >
+              <option value="all">All categories</option>
+              {jointCategoryOptions.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-small"
+            onClick={() => {
+              setJointDateFilter(currentYearMonthStart)
+              setJointCategoryFilter('all')
+            }}
+          >
+            Clear Filters
+          </button>
         </div>
       </div>
 
-      {isMobile ? (
-        <>
-          <div className="panel own-summary-mobile">
-            <h2>Joint Summary</h2>
-            <div className="summary-mobile-list">
-              <div className="summary-mobile-row">
-                <span>Total Joint Spend</span>
-                <strong>{fmtEUR(jointTotal)}</strong>
-              </div>
-              <div className="summary-mobile-row">
-                <span>Transactions</span>
-                <strong>{fmtInt(filteredJointTransactions.length)}</strong>
-              </div>
+      <div className="kpis">
+        <article className="kpi-card">
+          <span className="label">Filtered joint spend</span>
+          <strong>{fmtEUR(jointTabTotal)}</strong>
+        </article>
+        <article className="kpi-card">
+          <span className="label">Transactions</span>
+          <strong>{fmtInt(jointTabTransactions.length)}</strong>
+        </article>
+      </div>
 
-              {jointCategoryData.map((row) => (
-                <div key={row.name} className="summary-mobile-row">
-                  <span>{row.name}</span>
-                  <strong>{fmtEUR(row.value)}</strong>
-                </div>
-              ))}
+      <div className="grid-2">
+        <section className="panel chart-panel">
+          <h2>Joint by Category</h2>
+          {jointTabCategoryData.length === 0 ? (
+            <EmptyState message="No joint transactions match the selected filters." />
+          ) : (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie
+                    data={jointTabCategoryData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={110}
+                    innerRadius={55}
+                    paddingAngle={2}
+                  >
+                    {jointTabCategoryData.map((entry, index) => (
+                      <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => fmtEUR(value)} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-          </div>
+          )}
+        </section>
 
-          <div className="panel">
-            <h2>Joint Transactions ({sortedJointTransactions.length})</h2>
-            <div className="tx-mobile-list">
-              {sortedJointTransactions.map((t) => (
-                <div key={t.id} className="tx-mobile-card">
-                  <div className="tx-mobile-top">
-                    <div className="tx-mobile-main">
-                      <div className="tx-mobile-desc">{t.description}</div>
-                      <div className="tx-mobile-meta">
-                        <span>{t.date}</span>
-                        <span>•</span>
-                        <span>{t.category}</span>
-                      </div>
+        <section className="panel chart-panel">
+          <h2>Joint by Month</h2>
+          {jointTabMonthData.length === 0 ? (
+            <EmptyState message="No joint monthly data for the selected filters." />
+          ) : (
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={jointTabMonthData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => fmtNumber(value)} />
+                  <Tooltip formatter={(value) => fmtEUR(value)} />
+                  <Bar dataKey="value" fill="var(--color-primary)" radius={[10, 10, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="panel">
+        <h2>Joint Transactions ({jointTabTransactions.length})</h2>
+        {jointTabTransactions.length === 0 ? (
+          <EmptyState message="No joint transactions match the selected filters." />
+        ) : isMobile ? (
+          <div className="tx-mobile-list">
+            {jointTabTransactions.map((t) => (
+              <div
+                key={t.id}
+                className={`tx-mobile-card ${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''}`.trim()}
+              >
+                <div className="tx-mobile-top">
+                  <div className="tx-mobile-main">
+                    <div className="tx-mobile-desc">{t.description}</div>
+                    <div className="tx-mobile-meta">
+                      <span>{t.date}</span>
+                      <span>•</span>
+                      <span>{t.category}</span>
                     </div>
-                    <div className="tx-mobile-amount">{fmtEUR(t.jointAmount || 0)}</div>
                   </div>
+                  <div className="tx-mobile-amount">{fmtEUR(t.jointAmount ?? t.amount || 0)}</div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        </>
-      ) : (
-        <div className="grid-2">
-          <div className="panel">
-            <h2>Joint Transactions ({sortedJointTransactions.length})</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th onClick={() => handleJointSort('date')}>Date</th>
-                    <th onClick={() => handleJointSort('description')}>Description</th>
-                    <th onClick={() => handleJointSort('category')}>Category</th>
-                    <th onClick={() => handleJointSort('amount')}>Amount</th>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th>Amount</th>
+                  <th>Split</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jointTabTransactions.map((t) => (
+                  <tr
+                    key={t.id}
+                    className={`${t.split ? 'split-row' : ''} ${t.splitPaid ? 'split-paid-row' : ''}`.trim()}
+                  >
+                    <td>{t.date}</td>
+                    <td><span className="muted">{t.description}</span></td>
+                    <td>{t.category}</td>
+                    <td className="amount">{fmtEUR(t.jointAmount ?? t.amount || 0)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+                        disabled
+                      >
+                        {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {sortedJointTransactions.map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.date}</td>
-                      <td>{t.description}</td>
-                      <td>{t.category}</td>
-                      <td className="amount">{fmtEUR(t.jointAmount || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <div className="panel">
-            <h2>Joint Summary</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <tbody>
-                  <tr>
-                    <td>Total Joint Spend</td>
-                    <td className="amount">{fmtEUR(jointTotal)}</td>
-                  </tr>
-                  <tr>
-                    <td>Transactions</td>
-                    <td className="amount">{fmtInt(filteredJointTransactions.length)}</td>
-                  </tr>
-                  {jointCategoryData.map((row) => (
-                    <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td className="amount">{fmtEUR(row.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </>
   ))}
 
