@@ -2083,168 +2083,201 @@ async function deleteTransaction(id) {
         )}
       </div>
 
-      {activeTab === 'Own' &&
-        (!hasData ? (
-          <EmptyState />
-        ) : (
-          <>
-            <div className="grid-2">
-              <div className="panel">
-                <h2>Spending by Category</h2>
-                <ResponsiveContainer width="100%" height={pieHeight}>
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      dataKey="value"
-                      nameKey="name"
-                      outerRadius={90}
-                      label={({ name, percent }) => `${name} ${fmtNumber(percent * 100, 0)}%`}
-                    >
-                      {categoryData.map((d) => (
-                        <Cell key={d.name} fill={getCategoryColor(d.name)} />
-                      ))}
-                    </Pie>
-                    <Tooltip {...tt} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="panel">
-                <h2>Monthly Spend</h2>
-                <ResponsiveContainer width="100%" height={chartHeight}>
-                  <BarChart data={monthData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
-                    <XAxis dataKey="name" tick={axisTick} />
-                    <YAxis tick={axisTick} />
-                    <Tooltip {...tt} />
-                    <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="grid-2">
-              <div className="panel">
-                <h2>Own Transactions ({sortedTransactions.length})</h2>
-                {isMobile ? (
-  <div className="tx-mobile-list">
-    {sortedTransactions.map((t) => (
-      <div key={t.id} className="tx-mobile-card">
-        <div className="tx-mobile-top">
-          <div className="tx-mobile-main">
-            <div className="tx-mobile-desc">{t.description}</div>
-            <div className="tx-mobile-meta">
-              <span>{t.date}</span>
-              <span>•</span>
-              <span>{t.category}</span>
-            </div>
-          </div>
-          <div className="tx-mobile-amount">{fmtEUR(t.myAmount || 0)}</div>
+{activeTab === 'Own' &&
+  (!hasData ? (
+    <EmptyState />
+  ) : (
+    <>
+      <div className="grid-2">
+        <div className="panel">
+          <h2>Spending by Category</h2>
+          <ResponsiveContainer width="100%" height={pieHeight}>
+            <PieChart>
+              <Pie
+                data={categoryData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={90}
+                label={({ name, percent }) => `${name} ${fmtNumber(percent * 100, 0)}%`}
+              >
+                {categoryData.map((d) => (
+                  <Cell key={d.name} fill={getCategoryColor(d.name)} />
+                ))}
+              </Pie>
+              <Tooltip {...tt} />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
 
-        <div className="tx-mobile-actions">
-          <button
-            type="button"
-            className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
-            onClick={() => toggleSplit(t.id)}
-            disabled={
-              t.splitPaid ||
-              (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-            }
-            title={
-              t.splitPaid
-                ? 'Already paid'
-                : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                  ? 'This split was set by the other user and cannot be changed here'
-                  : ''
-            }
-          >
-            {t.splitPaid ? 'Already Paid' : t.split ? 'Split: Yes' : 'Split: No'}
-          </button>
-
-          <button
-            type="button"
-            className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
-            onClick={() => handleJointToggle(t)}
-          >
-            {t.joint || t.account === 'joint' ? 'Joint: Yes' : 'Joint: No'}
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-quiet"
-            onClick={() => startEdit(t)}
-          >
-            Edit
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-quiet"
-            onClick={() => deleteTransaction(t.id)}
-          >
-            Delete
-          </button>
+        <div className="panel">
+          <h2>Monthly Spend</h2>
+          <ResponsiveContainer width="100%" height={chartHeight}>
+            <BarChart data={monthData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" />
+              <XAxis dataKey="name" tick={axisTick} />
+              <YAxis tick={axisTick} />
+              <Tooltip {...tt} />
+              <Bar dataKey="value" fill="#01696f" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
-    ))}
-  </div>
-) : (
-  <div className="table-wrap">
-    <table className="data-table">
-      <thead>
-        <tr>
-          <th onClick={() => handleSort('date')}>Date</th>
-          <th onClick={() => handleSort('description')}>Description</th>
-          <th onClick={() => handleSort('category')}>Category</th>
-          <th onClick={() => handleSort('amount')}>Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {sortedTransactions.map((t) => (
-          <tr key={t.id}>
-            <td>{t.date}</td>
-            <td>{t.description}</td>
-            <td>{t.category}</td>
-            <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-)}
-              </div>
 
-              <div className="panel">
-                <h2>Own Summary</h2>
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <tbody>
-                      <tr>
-                        <td>Total Own Spend</td>
-                        <td className="amount">{fmtEUR(myTotalSpend)}</td>
-                      </tr>
-                      <tr>
-                        <td>Transactions</td>
-                        <td className="amount">{fmtInt(filtered.length)}</td>
-                      </tr>
-                      <tr>
-                        <td>Categories</td>
-                        <td className="amount">{fmtInt(categoryData.length)}</td>
-                      </tr>
-                      {categoryData.map((row) => (
-                        <tr key={row.name}>
-                          <td>{row.name}</td>
-                          <td className="amount">{fmtEUR(row.value)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+      {isMobile ? (
+        <>
+          <div className="panel own-summary-mobile">
+            <h2>Own Summary</h2>
+            <div className="table-wrap">
+              <table className="data-table">
+                <tbody>
+                  <tr>
+                    <td>Total Own Spend</td>
+                    <td className="amount">{fmtEUR(myTotalSpend)}</td>
+                  </tr>
+                  <tr>
+                    <td>Transactions</td>
+                    <td className="amount">{fmtInt(filtered.length)}</td>
+                  </tr>
+                  <tr>
+                    <td>Categories</td>
+                    <td className="amount">{fmtInt(categoryData.length)}</td>
+                  </tr>
+                  {categoryData.map((row) => (
+                    <tr key={row.name}>
+                      <td>{row.name}</td>
+                      <td className="amount">{fmtEUR(row.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </>
-        ))}
+          </div>
+
+          <div className="panel">
+            <h2>Own Transactions ({sortedTransactions.length})</h2>
+            <div className="tx-mobile-list">
+              {sortedTransactions.map((t) => (
+                <div key={t.id} className="tx-mobile-card">
+                  <div className="tx-mobile-top">
+                    <div className="tx-mobile-main">
+                      <div className="tx-mobile-desc">{t.description}</div>
+                      <div className="tx-mobile-meta">
+                        <span>{t.date}</span>
+                        <span>•</span>
+                        <span>{t.category}</span>
+                      </div>
+                    </div>
+                    <div className="tx-mobile-amount">{fmtEUR(t.myAmount || 0)}</div>
+                  </div>
+
+                  <div className="tx-mobile-actions">
+                    <button
+                      type="button"
+                      className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+                      onClick={() => toggleSplit(t.id)}
+                      disabled={
+                        t.splitPaid ||
+                        (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                      }
+                      title={
+                        t.splitPaid
+                          ? 'Already paid'
+                          : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+                            ? 'This split was set by the other user and cannot be changed here'
+                            : ''
+                      }
+                    >
+                      {t.splitPaid ? 'Already Paid' : t.split ? 'Split: Yes' : 'Split: No'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
+                      onClick={() => handleJointToggle(t)}
+                    >
+                      {t.joint || t.account === 'joint' ? 'Joint: Yes' : 'Joint: No'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-quiet"
+                      onClick={() => startEdit(t)}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-quiet"
+                      onClick={() => deleteTransaction(t.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="grid-2">
+          <div className="panel">
+            <h2>Own Transactions ({sortedTransactions.length})</h2>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th onClick={() => handleSort('date')}>Date</th>
+                    <th onClick={() => handleSort('description')}>Description</th>
+                    <th onClick={() => handleSort('category')}>Category</th>
+                    <th onClick={() => handleSort('amount')}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedTransactions.map((t) => (
+                    <tr key={t.id}>
+                      <td>{t.date}</td>
+                      <td>{t.description}</td>
+                      <td>{t.category}</td>
+                      <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="panel">
+            <h2>Own Summary</h2>
+            <div className="table-wrap">
+              <table className="data-table">
+                <tbody>
+                  <tr>
+                    <td>Total Own Spend</td>
+                    <td className="amount">{fmtEUR(myTotalSpend)}</td>
+                  </tr>
+                  <tr>
+                    <td>Transactions</td>
+                    <td className="amount">{fmtInt(filtered.length)}</td>
+                  </tr>
+                  <tr>
+                    <td>Categories</td>
+                    <td className="amount">{fmtInt(categoryData.length)}</td>
+                  </tr>
+                  {categoryData.map((row) => (
+                    <tr key={row.name}>
+                      <td>{row.name}</td>
+                      <td className="amount">{fmtEUR(row.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  ))}
 
       {activeTab === 'Joint' &&
         (!hasData ? (
