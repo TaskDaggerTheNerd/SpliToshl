@@ -697,30 +697,21 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     const isJointTx = t.joint || t.account === 'joint'
     if (isJointTx) return false
 
-    const matchesDate = !ownDateFilter || String(t.date || '').startsWith(ownDateFilter.slice(0, 4))
+    const txDate = String(t.date || '')
+    const txYear = txDate.slice(0, 4)
+    const txMonth = txDate.slice(5, 7)
+
+    const matchesYear = !ownYearFilter || txYear === ownYearFilter
+    const matchesMonth = !ownMonthFilter || txMonth === ownMonthFilter
     const matchesCategory = ownCategoryFilter === 'all' || t.category === ownCategoryFilter
 
-    if (ownDateFilter && ownDateFilter.length === 7) {
-      const selectedYear = ownDateFilter.slice(0, 4)
-      const matchesYear = String(t.date || '').startsWith(selectedYear)
-      if (!matchesYear) return false
-    }
-
-    return matchesCategory
+    return matchesYear && matchesMonth && matchesCategory
   })
-}, [transactions, ownDateFilter, ownCategoryFilter])
+}, [transactions, ownYearFilter, ownMonthFilter, ownCategoryFilter])
 
 const ownFilteredByMonthTransactions = useMemo(() => {
-  if (!ownDateFilter) return ownFilteredTransactions
-
-  if (ownDateFilter.length === 7) {
-    return ownFilteredTransactions.filter((t) =>
-      String(t.date || '').startsWith(ownDateFilter.slice(0, 4))
-    )
-  }
-
   return ownFilteredTransactions
-}, [ownFilteredTransactions, ownDateFilter])
+}, [ownFilteredTransactions])
 
 const jointBaseTransactions = useMemo(
   () => transactions.filter((t) => t.joint || t.account === 'joint'),
