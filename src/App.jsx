@@ -720,17 +720,17 @@ const jointBaseTransactions = useMemo(
 
 const jointFilteredTransactions2 = useMemo(() => {
   return jointBaseTransactions.filter((t) => {
+    const txDate = String(t.date || '')
+    const txYear = txDate.slice(0, 4)
+    const txMonth = txDate.slice(5, 7)
+
+    const matchesYear = !jointYearFilter || txYear === jointYearFilter
+    const matchesMonth = !jointMonthFilter || txMonth === jointMonthFilter
     const matchesCategory = jointCategoryFilter === 'all' || t.category === jointCategoryFilter
 
-    if (jointDateFilter && jointDateFilter.length === 7) {
-      const selectedYear = jointDateFilter.slice(0, 4)
-      const matchesYear = String(t.date || '').startsWith(selectedYear)
-      if (!matchesYear) return false
-    }
-
-    return matchesCategory
+    return matchesYear && matchesMonth && matchesCategory
   })
-}, [jointBaseTransactions, jointDateFilter, jointCategoryFilter])
+}, [jointBaseTransactions, jointYearFilter, jointMonthFilter, jointCategoryFilter])
 
 const ownTabTransactions = useMemo(() => {
   return myTransactions.filter((t) => {
