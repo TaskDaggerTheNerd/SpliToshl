@@ -2127,27 +2127,27 @@ async function deleteTransaction(id) {
               <div className="panel">
                 <h2>Own Transactions ({sortedTransactions.length})</h2>
                 <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th onClick={() => handleSort('date')}>Date</th>
-                        <th onClick={() => handleSort('description')}>Description</th>
-                        <th onClick={() => handleSort('category')}>Category</th>
-                        <th onClick={() => handleSort('amount')}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedTransactions.map((t) => (
-                        <tr key={t.id}>
-                          <td>{t.date}</td>
-                          <td>{t.description}</td>
-                          <td>{t.category}</td>
-                          <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+  <table className="data-table">
+    <thead>
+      <tr>
+        <th onClick={() => handleSort('date')}>Date</th>
+        <th onClick={() => handleSort('description')}>Description</th>
+        <th onClick={() => handleSort('category')}>Category</th>
+        <th onClick={() => handleSort('amount')}>Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {sortedTransactions.map((t) => (
+        <tr key={t.id}>
+          <td>{t.date}</td>
+          <td>{t.description}</td>
+          <td>{t.category}</td>
+          <td className="amount">{fmtEUR(t.myAmount || 0)}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
               </div>
 
               <div className="panel">
