@@ -195,6 +195,8 @@ const [jointDateFilter, setJointDateFilter] = useState(currentYearMonthStart)
 const [jointCategoryFilter, setJointCategoryFilter] = useState('all')
 
 const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
+
+const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({
     date: '',
@@ -806,7 +808,7 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
     return PALETTE[safeIdx % PALETTE.length]
   }
 
-  const ownCategoryOptions = useMemo(() => {
+const ownCategoryOptions = useMemo(() => {
   return [...new Set(
     transactions
       .filter((t) => !(t.joint || t.account === 'joint'))
