@@ -2811,49 +2811,43 @@ async function deleteTransaction(id) {
                       </div>
 
                       <div className="tx-mobile-details">
-                        <div className="tx-mobile-detail-row">
-                          <span>Split</span>
-                          <div className="tx-mobile-detail-value">
-                            <button
-                              type="button"
-                              className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
-                              onClick={() => toggleSplit(t.id)}
-                              disabled={
-                                t.splitPaid ||
-                                (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                              }
-                              title={
-                                t.splitPaid
-                                  ? 'Already paid'
-                                  : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
-                                    ? 'This split was set by the other user and cannot be changed here'
-                                    : ''
-                              }
-                            >
-                              {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
-                            </button>
+  <div className="tx-mobile-detail-row">
+    <span>Split</span>
+    <div className="tx-mobile-detail-value">
+      <button
+        type="button"
+        className={`btn btn-split ${t.split ? 'yes' : ''} ${t.splitPaid ? 'paid' : ''}`}
+        onClick={() => toggleSplit(t.id)}
+        disabled={
+          t.splitPaid ||
+          (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+        }
+        title={
+          t.splitPaid
+            ? 'Already paid'
+            : (t.split && Number(t.createdByUserId || 0) !== Number(user?.id || 0))
+              ? 'This split was set by the other user and cannot be changed here'
+              : ''
+        }
+      >
+        {t.splitPaid ? 'Already Paid' : t.split ? 'Yes' : 'No'}
+      </button>
+    </div>
+  </div>
 
-                            {t.splitPaid && (
-                              <span className="paid-badge-mobile">
-                                Already Paid
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="tx-mobile-detail-row">
-                          <span>Joint?</span>
-                          <div className="tx-mobile-detail-value">
-                            <button
-                              type="button"
-                              className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
-                              onClick={() => handleJointToggle(t)}
-                            >
-                              {t.joint || t.account === 'joint' ? 'Yes' : 'No'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+  <div className="tx-mobile-detail-row">
+    <span>Joint?</span>
+    <div className="tx-mobile-detail-value">
+      <button
+        type="button"
+        className={`btn btn-split ${t.joint || t.account === 'joint' ? 'yes' : ''}`}
+        onClick={() => handleJointToggle(t)}
+      >
+        {t.joint || t.account === 'joint' ? 'Yes' : 'No'}
+      </button>
+    </div>
+  </div>
+</div>
 
                       <div className="tx-mobile-actions">
                         <button

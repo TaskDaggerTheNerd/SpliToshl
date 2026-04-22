@@ -653,7 +653,7 @@ table {
 /* Mobile transaction cards */
 .tx-mobile-list {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.55rem;
   justify-items: center;
 }
 
@@ -663,7 +663,7 @@ table {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  padding: 0.75rem;
+  padding: 0.65rem 0.7rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
@@ -671,7 +671,7 @@ table {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 0.6rem;
+  gap: 0.55rem;
 }
 
 .tx-mobile-main {
@@ -681,44 +681,85 @@ table {
 
 .tx-mobile-desc {
   font-weight: 600;
-  line-height: 1.2;
-  font-size: 0.95rem;
+  line-height: 1.15;
+  font-size: 0.92rem;
   color: var(--color-text);
   word-break: break-word;
 }
 
 .tx-mobile-meta {
-  margin-top: 0.3rem;
+  margin-top: 0.22rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  font-size: 0.78rem;
+  gap: 0.28rem;
+  font-size: 0.76rem;
   color: var(--color-text-muted);
 }
 
 .tx-mobile-amount {
   flex-shrink: 0;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   color: var(--color-text);
   white-space: nowrap;
 }
 
+.tx-mobile-details {
+  margin-top: 0.55rem;
+  display: grid;
+  gap: 0.38rem;
+}
+
+.tx-mobile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.55rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--color-divider);
+}
+
+.tx-mobile-detail-row span {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+}
+
+.tx-mobile-detail-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
 .tx-mobile-actions {
-  margin-top: 0.7rem;
+  margin-top: 0.55rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .tx-mobile-actions .btn {
-  min-height: 34px;
-  padding: 0.35rem 0.55rem;
-  font-size: 0.78rem;
+  min-height: 32px;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.76rem;
 }
 
-.own-summary-mobile {
-  margin-bottom: 0.75rem;
+.tx-mobile-card .btn-split {
+  min-height: 30px;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.74rem;
+}
+
+.tx-mobile-edit {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.transactions-mobile-filters {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.9rem;
 }
 
 @media (max-width: 1024px) {
