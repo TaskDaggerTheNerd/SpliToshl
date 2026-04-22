@@ -183,15 +183,18 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
   const currentMonth = new Date().toISOString().slice(0, 7)
-const currentYearMonthStart = `${new Date().getFullYear()}-01`
+const currentYearValue = String(new Date().getFullYear())
+const currentMonthValue = String(new Date().getMonth() + 1).padStart(2, '0')
 
 const [dateFilter, setDateFilter] = useState('')
 const [transactionCategoryFilter, setTransactionCategoryFilter] = useState('all')
 
-const [ownDateFilter, setOwnDateFilter] = useState(currentYearMonthStart)
+const [ownYearFilter, setOwnYearFilter] = useState(currentYearValue)
+const [ownMonthFilter, setOwnMonthFilter] = useState(currentMonthValue)
 const [ownCategoryFilter, setOwnCategoryFilter] = useState('all')
 
-const [jointDateFilter, setJointDateFilter] = useState(currentYearMonthStart)
+const [jointYearFilter, setJointYearFilter] = useState(currentYearValue)
+const [jointMonthFilter, setJointMonthFilter] = useState(currentMonthValue)
 const [jointCategoryFilter, setJointCategoryFilter] = useState('all')
 
 const [overviewCategoryFilter, setOverviewCategoryFilter] = useState('all')
@@ -738,7 +741,23 @@ const jointFilteredTransactions2 = useMemo(() => {
   })
 }, [jointBaseTransactions, jointDateFilter, jointCategoryFilter])
 
-const ownTabTransactions = ownFilteredByMonthTransactions
+const ownTabTransactions = useMemo(() => {
+  return myTransactions.filter((t) => {
+    const isJointTx = t.account === 'joint' || t.joint
+    if (isJointTx) return false
+
+    const txDate = String(t.date || '')
+    const txYear = txDate.slice(0, 4)
+    const txMonth = txDate.slice(5, 7)
+
+    const matchesYear = !ownYearFilter || txYear === ownYearFilter
+    const matchesMonth = !ownMonthFilter || txMonth === ownMonthFilter
+    const matchesCategory =
+      ownCategoryFilter === 'all' || (t.category || 'Other') === ownCategoryFilter
+
+    return matchesYear && matchesMonth && matchesCategory
+  })
+}, [myTransactions, ownYearFilter, ownMonthFilter, ownCategoryFilter])
 
 const ownTabCategoryData = useMemo(() => {
   const totals = new Map()
@@ -772,7 +791,20 @@ const ownTabTotal = useMemo(
   [ownTabTransactions]
 )
 
-const jointTabTransactions = jointFilteredTransactions2
+const jointTabTransactions = useMemo(() => {
+  return jointTransactions.filter((t) => {
+    const txDate = String(t.date || '')
+    const txYear = txDate.slice(0, 4)
+    const txMonth = txDate.slice(5, 7)
+
+    const matchesYear = !jointYearFilter || txYear === jointYearFilter
+    const matchesMonth = !jointMonthFilter || txMonth === jointMonthFilter
+    const matchesCategory =
+      jointCategoryFilter === 'all' || (t.category || 'Other') === jointCategoryFilter
+
+    return matchesYear && matchesMonth && matchesCategory
+  })
+}, [jointTransactions, jointYearFilter, jointMonthFilter, jointCategoryFilter])
 
 const jointTabCategoryData = useMemo(() => {
   const totals = new Map()
@@ -843,6 +875,21 @@ useEffect(() => {
 const kpiTransactions = useMemo(() => {
   return transactions.filter((t) => String(t.date || '').slice(0, 4) === kpiYear)
 }, [transactions, kpiYear])
+
+const monthOptions = [
+  { value: '01', label: 'January' },
+  { value: '02', label: 'February' },
+  { value: '03', label: 'March' },
+  { value: '04', label: 'April' },
+  { value: '05', label: 'May' },
+  { value: '06', label: 'June' },
+  { value: '07', label: 'July' },
+  { value: '08', label: 'August' },
+  { value: '09', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
+]
 
 const kpiMyTransactions = useMemo(() => {
   return kpiTransactions.map((t) => {
@@ -2242,43 +2289,64 @@ async function deleteTransaction(id) {
         </div>
 
         <div className="transactions-mobile-filters own-joint-filters" style={{ marginTop: '1rem' }}>
-          <div className="field-group">
-            <span>Date</span>
-            <input
-              className="field-input"
-              type="month"
-              value={ownDateFilter}
-              onChange={(e) => setOwnDateFilter(e.target.value)}
-            />
-          </div>
+  <div className="field-group">
+    <span>Year</span>
+    <select
+      className="field-input"
+      value={ownYearFilter}
+      onChange={(e) => setOwnYearFilter(e.target.value)}
+    >
+      {availableYears.map((year) => (
+        <option key={year} value={year}>
+          {year}
+        </option>
+      ))}
+    </select>
+  </div>
 
-          <div className="field-group">
-            <span>Category</span>
-            <select
-              className="field-input"
-              value={ownCategoryFilter}
-              onChange={(e) => setOwnCategoryFilter(e.target.value)}
-            >
-              <option value="all">All categories</option>
-              {ownCategoryOptions.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
+  <div className="field-group">
+    <span>Month</span>
+    <select
+      className="field-input"
+      value={ownMonthFilter}
+      onChange={(e) => setOwnMonthFilter(e.target.value)}
+    >
+      {monthOptions.map((month) => (
+        <option key={month.value} value={month.value}>
+          {month.label}
+        </option>
+      ))}
+    </select>
+  </div>
 
-          <button
-            type="button"
-            className="btn btn-small"
-            onClick={() => {
-              setOwnDateFilter(currentYearMonthStart)
-              setOwnCategoryFilter('all')
-            }}
-          >
-            Clear Filters
-          </button>
-        </div>
+  <div className="field-group">
+    <span>Category</span>
+    <select
+      className="field-input"
+      value={ownCategoryFilter}
+      onChange={(e) => setOwnCategoryFilter(e.target.value)}
+    >
+      <option value="all">All categories</option>
+      {ownCategoryOptions.map((cat) => (
+        <option key={cat} value={cat}>
+          {cat}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <button
+    type="button"
+    className="btn btn-small"
+    onClick={() => {
+      setOwnYearFilter(currentYearValue)
+      setOwnMonthFilter(currentMonthValue)
+      setOwnCategoryFilter('all')
+    }}
+  >
+    Clear Filters
+  </button>
+</div>
       </div>
 
       <div className="kpis">
@@ -2418,43 +2486,64 @@ async function deleteTransaction(id) {
         <h2>Joint Overview</h2>
 
         <div className="transactions-mobile-filters own-joint-filters" style={{ marginTop: '1rem' }}>
-          <div className="field-group">
-            <span>Date</span>
-            <input
-              className="field-input"
-              type="month"
-              value={jointDateFilter}
-              onChange={(e) => setJointDateFilter(e.target.value)}
-            />
-          </div>
+  <div className="field-group">
+    <span>Year</span>
+    <select
+      className="field-input"
+      value={jointYearFilter}
+      onChange={(e) => setJointYearFilter(e.target.value)}
+    >
+      {availableYears.map((year) => (
+        <option key={year} value={year}>
+          {year}
+        </option>
+      ))}
+    </select>
+  </div>
 
-          <div className="field-group">
-            <span>Category</span>
-            <select
-              className="field-input"
-              value={jointCategoryFilter}
-              onChange={(e) => setJointCategoryFilter(e.target.value)}
-            >
-              <option value="all">All categories</option>
-              {jointCategoryOptions.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
+  <div className="field-group">
+    <span>Month</span>
+    <select
+      className="field-input"
+      value={jointMonthFilter}
+      onChange={(e) => setJointMonthFilter(e.target.value)}
+    >
+      {monthOptions.map((month) => (
+        <option key={month.value} value={month.value}>
+          {month.label}
+        </option>
+      ))}
+    </select>
+  </div>
 
-          <button
-            type="button"
-            className="btn btn-small"
-            onClick={() => {
-              setJointDateFilter(currentYearMonthStart)
-              setJointCategoryFilter('all')
-            }}
-          >
-            Clear Filters
-          </button>
-        </div>
+  <div className="field-group">
+    <span>Category</span>
+    <select
+      className="field-input"
+      value={jointCategoryFilter}
+      onChange={(e) => setJointCategoryFilter(e.target.value)}
+    >
+      <option value="all">All categories</option>
+      {jointCategoryOptions.map((cat) => (
+        <option key={cat} value={cat}>
+          {cat}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <button
+    type="button"
+    className="btn btn-small"
+    onClick={() => {
+      setJointYearFilter(currentYearValue)
+      setJointMonthFilter(currentMonthValue)
+      setJointCategoryFilter('all')
+    }}
+  >
+    Clear Filters
+  </button>
+</div>
       </div>
 
       <div className="kpis">

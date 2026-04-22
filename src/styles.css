@@ -1098,7 +1098,7 @@ table {
 
 @media (min-width: 641px) {
   .own-joint-filters {
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: 1fr 1fr 1fr auto;
     align-items: end;
   }
 }
