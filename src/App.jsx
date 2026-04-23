@@ -2096,7 +2096,7 @@ async function deleteTransaction(id) {
       <div className="mobile-home-right">
         {user ? (
           <>
-            <span className="muted">Signed in as {user.displayName || user.username}</span>
+            <span className="muted">{user.displayName || user.username}</span>
             <button type="button" className="btn btn-quiet" onClick={signOutUser}>
               Sign out
             </button>
@@ -2214,7 +2214,7 @@ async function deleteTransaction(id) {
 
     {user ? (
       <>
-        <span className="muted">Signed in as {user.displayName || user.username}</span>
+        <span className="muted">{user.displayName || user.username}</span>
         <button type="button" className="btn btn-quiet" onClick={signOutUser}>
           Sign out
         </button>
