@@ -30,6 +30,12 @@ import { saveToIDB, clearIDB, exportJSON, importJSON } from './storage'
 import { supabase } from './supabase'
 import { generatePDFReport, generateSplitPDFReport } from './report'
 
+const JointShareIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+  </svg>
+)
+
 const PALETTE = [
   '#01696f',
   '#e9c46a',
@@ -736,9 +742,6 @@ const jointFilteredTransactions2 = useMemo(() => {
 
 const ownTabTransactions = useMemo(() => {
   return myTransactions.filter((t) => {
-    const isJointTx = t.account === 'joint' || t.joint
-    if (isJointTx) return false
-
     const txDate = String(t.date || '')
     const txYear = txDate.slice(0, 4)
     const txMonth = txDate.slice(5, 7)
@@ -749,16 +752,26 @@ const ownTabTransactions = useMemo(() => {
       ownCategoryFilter === 'all' || (t.category || 'Other') === ownCategoryFilter
 
     return matchesYear && matchesMonth && matchesCategory
+  }).map((t) => {
+    const isJointTx = t.account === 'joint' || t.joint
+    const amount = isJointTx ? Math.abs(Number(t.amount || 0)) / 2 : Math.abs(Number(t.amount || 0))
+    
+    return {
+      ...t,
+      amount, // Halved for joint transactions
+      isJointShare: isJointTx, // Flag for icon display
+    }
   })
 }, [myTransactions, ownYearFilter, ownMonthFilter, ownCategoryFilter])
 
 const ownTabCategoryData = useMemo(() => {
   const totals = new Map()
 
-  ownTabTransactions.forEach((t) => {
-    const key = t.category || 'Other'
-    totals.set(key, (totals.get(key) || 0) + Math.abs(Number(t.amount || 0)))
-  })
+  // These already use t.amount, which is now correctly halved for joint tx
+ownTabTransactions.forEach((t) => {
+  const key = t.category || 'Other'
+  totals.set(key, (totals.get(key) || 0) + Math.abs(Number(t.amount || 0)))
+})
 
   return [...totals.entries()]
     .map(([name, value]) => ({ name, value }))
@@ -2451,7 +2464,14 @@ async function deleteTransaction(id) {
                     <td>{t.date}</td>
                     <td><span className="muted">{t.description}</span></td>
                     <td>{t.category}</td>
-                    <td className="amount">{fmtEUR(t.amount || 0)}</td>
+                    <td className="amount">
+  {fmtEUR(t.amount || 0)}
+  {t.isJointShare && (
+    <span className="joint-share-icon" title="Merged from joint transaction">
+      ◎
+    </span>
+  )}
+</td>
                     <td>
                       <button
                         type="button"
@@ -3058,7 +3078,14 @@ async function deleteTransaction(id) {
                             <span>{t.category}</span>
                           </div>
                         </div>
-                        <div className="tx-mobile-amount">{fmtEUR(t.amount || 0)}</div>
+                        <div className="tx-mobile-amount">
+  {fmtEUR(t.amount || 0)}
+  {t.isJointShare && (
+    <span className="joint-share-icon" title="Merged from joint transaction">
+      ◎
+    </span>
+  )}
+</div>
                       </div>
 
                       <div className="tx-mobile-compact-actions">
