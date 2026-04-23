@@ -1198,6 +1198,22 @@ table {
 
 .mobile-kpi-full {
   grid-column: 1 / -1;
-  width: calc(100% - 1rem);
+  width: calc(100% - 1.25rem);
   margin: 0 auto;
+  padding: 0.75rem 1rem;
+  text-align: center;
+}
+
+.mobile-kpi-full .label-row {
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+
+.mobile-kpi-full .label {
+  text-align: center;
+  width: 100%;
+}
+
+.mobile-kpi-full .value {
+  text-align: center;
 }

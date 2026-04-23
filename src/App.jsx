@@ -2065,42 +2065,50 @@ async function deleteTransaction(id) {
   {isMobile ? (
     <div className="mobile-home-actions">
       <div className="mobile-home-topline">
-        <div className="mobile-home-left">
-          <button
-            type="button"
-            className="mobile-mini-card"
-            onClick={() => setDarkMode((v) => !v)}
-            aria-label="Toggle theme"
-            title="Toggle theme"
-          >
-            {darkMode ? <SunIcon /> : <MoonIcon />}
-          </button>
+  <div className="mobile-home-left">
+    <button
+      type="button"
+      className="mobile-mini-card"
+      onClick={() => setDarkMode((v) => !v)}
+      aria-label="Toggle theme"
+      title="Toggle theme"
+    >
+      {darkMode ? <SunIcon /> : <MoonIcon />}
+    </button>
 
-          <button
-            type="button"
-            className="mobile-mini-card"
-            onClick={handleClearAll}
-          >
-            Clear
-          </button>
-        </div>
+    <button
+      type="button"
+      className="mobile-mini-card"
+      onClick={handleClearAll}
+    >
+      Clear
+    </button>
 
-        <div className="mobile-home-right">
-          {user ? (
-            <button type="button" className="mobile-mini-card" onClick={signOutUser}>
-              Sign out
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="mobile-mini-card"
-              onClick={() => signInWithNamePassword(loginName, loginPassword)}
-            >
-              Sign in
-            </button>
-          )}
-        </div>
-      </div>
+    <button
+      type="button"
+      className="mobile-mini-card"
+      onClick={handlePDF}
+    >
+      PDF
+    </button>
+  </div>
+
+  <div className="mobile-home-right">
+    {user ? (
+      <button type="button" className="mobile-mini-card" onClick={signOutUser}>
+        Sign out
+      </button>
+    ) : (
+      <button
+        type="button"
+        className="mobile-mini-card"
+        onClick={() => signInWithNamePassword(loginName, loginPassword)}
+      >
+        Sign in
+      </button>
+    )}
+  </div>
+</div>
 
       <div className="mobile-home-row mobile-home-row-2">
         <button
@@ -2306,11 +2314,8 @@ async function deleteTransaction(id) {
       <div className="mobile-kpi-row">
         <div className="kpi-card accent mobile-kpi-full">
           <div className="label-row">
-            <div className="label">{splitBalanceLabel}</div>
-            <button type="button" className="btn btn-small" onClick={handlePDF}>
-              PDF
-            </button>
-          </div>
+  <div className="label">{splitBalanceLabel}</div>
+</div>
           <div className="value">{fmtEUR(splitBalanceValue)}</div>
         </div>
       </div>
