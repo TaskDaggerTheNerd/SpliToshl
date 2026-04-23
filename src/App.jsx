@@ -2062,39 +2062,13 @@ async function deleteTransaction(id) {
         </div>
 
         <div className="topbar-actions">
-          <button type="button" className="btn btn-primary" onClick={() => fileRef.current?.click()}>
-            Import CSV / Excel
-          </button>
-
+  {isMobile ? (
+    <div className="mobile-home-actions">
+      <div className="mobile-home-topline">
+        <div className="mobile-home-left">
           <button
             type="button"
-            className="btn btn-small-icon"
-            onClick={openManualAdd}
-            title="Add expense"
-            aria-label="Add expense"
-          >
-            +
-          </button>
-
-          <button type="button" className="btn" onClick={() => jsonRef.current?.click()}>
-            Import JSON
-          </button>
-
-          <button type="button" className="btn" onClick={handleExport}>
-            Export JSON
-          </button>
-
-          <button type="button" className="btn" onClick={handlePDF}>
-            Download PDF
-          </button>
-
-          <button type="button" className="btn btn-quiet" onClick={handleClearAll}>
-            Clear
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-theme btn-theme-quiet"
+            className="mobile-mini-card"
             onClick={() => setDarkMode((v) => !v)}
             aria-label="Toggle theme"
             title="Toggle theme"
@@ -2102,142 +2076,325 @@ async function deleteTransaction(id) {
             {darkMode ? <SunIcon /> : <MoonIcon />}
           </button>
 
+          <button
+            type="button"
+            className="mobile-mini-card"
+            onClick={handleClearAll}
+          >
+            Clear
+          </button>
+        </div>
+
+        <div className="mobile-home-right">
           {user ? (
-            <>
-              <span className="muted">Signed in as {user.displayName || user.username}</span>
-              <button type="button" className="btn btn-quiet" onClick={signOutUser}>
-                Sign out
-              </button>
-            </>
+            <button type="button" className="mobile-mini-card" onClick={signOutUser}>
+              Sign out
+            </button>
           ) : (
-            <div className="login-inline">
-              <input
-                className="field-input login-input"
-                type="text"
-                placeholder="Username"
-                value={loginName}
-                onChange={(e) => setLoginName(e.target.value)}
-              />
-              <input
-                className="field-input login-input"
-                type="password"
-                placeholder="Password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                className="btn btn-quiet"
-                onClick={() => signInWithNamePassword(loginName, loginPassword)}
-              >
-                Log in
-              </button>
-            </div>
+            <button
+              type="button"
+              className="mobile-mini-card"
+              onClick={() => signInWithNamePassword(loginName, loginPassword)}
+            >
+              Sign in
+            </button>
           )}
+        </div>
+      </div>
 
+      <div className="mobile-home-row mobile-home-row-2">
+        <button
+          type="button"
+          className="mobile-action-card mobile-action-card-green"
+          onClick={() => fileRef.current?.click()}
+        >
+          Import CSV
+        </button>
+
+        <button
+          type="button"
+          className="mobile-action-card mobile-action-card-green"
+          onClick={openManualAdd}
+          title="Add expense"
+          aria-label="Add expense"
+        >
+          +
+        </button>
+      </div>
+
+      <div className="mobile-home-row mobile-home-row-2">
+        <button
+          type="button"
+          className="mobile-mini-card"
+          onClick={() => jsonRef.current?.click()}
+        >
+          Import JSON
+        </button>
+
+        <button
+          type="button"
+          className="mobile-mini-card"
+          onClick={handleExport}
+        >
+          Export JSON
+        </button>
+      </div>
+
+      {!user && (
+        <div className="mobile-login-compact">
           <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,.xlsx,.xls,text/csv"
-            hidden
-            onChange={async (e) => {
-              const file = e.target.files?.[0]
-              await handleFile(file)
-              e.target.value = ''
-            }}
+            className="field-input login-input"
+            type="text"
+            placeholder="Username"
+            value={loginName}
+            onChange={(e) => setLoginName(e.target.value)}
           />
-
           <input
-            ref={jsonRef}
-            type="file"
-            accept=".json,application/json"
-            hidden
-            onChange={async (e) => {
-              const file = e.target.files?.[0]
-              await handleJSONfile(file)
-              e.target.value = ''
-            }}
+            className="field-input login-input"
+            type="password"
+            placeholder="Password"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
           />
         </div>
+      )}
+    </div>
+  ) : (
+    <>
+      <button type="button" className="btn btn-primary" onClick={() => fileRef.current?.click()}>
+        Import CSV / Excel
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-small-icon"
+        onClick={openManualAdd}
+        title="Add expense"
+        aria-label="Add expense"
+      >
+        +
+      </button>
+
+      <button type="button" className="btn" onClick={() => jsonRef.current?.click()}>
+        Import JSON
+      </button>
+
+      <button type="button" className="btn" onClick={handleExport}>
+        Export JSON
+      </button>
+
+      <button type="button" className="btn" onClick={handlePDF}>
+        Download PDF
+      </button>
+
+      <button type="button" className="btn btn-quiet" onClick={handleClearAll}>
+        Clear
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-theme btn-theme-quiet"
+        onClick={() => setDarkMode((v) => !v)}
+        aria-label="Toggle theme"
+        title="Toggle theme"
+      >
+        {darkMode ? <SunIcon /> : <MoonIcon />}
+      </button>
+
+      {user ? (
+        <>
+          <span className="muted">Signed in as {user.displayName || user.username}</span>
+          <button type="button" className="btn btn-quiet" onClick={signOutUser}>
+            Sign out
+          </button>
+        </>
+      ) : (
+        <div className="login-inline">
+          <input
+            className="field-input login-input"
+            type="text"
+            placeholder="Username"
+            value={loginName}
+            onChange={(e) => setLoginName(e.target.value)}
+          />
+          <input
+            className="field-input login-input"
+            type="password"
+            placeholder="Password"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={() => signInWithNamePassword(loginName, loginPassword)}
+          >
+            Log in
+          </button>
+        </div>
+      )}
+    </>
+  )}
+
+  <input
+    ref={fileRef}
+    type="file"
+    accept=".csv,.xlsx,.xls,text/csv"
+    hidden
+    onChange={async (e) => {
+      const file = e.target.files?.[0]
+      await handleFile(file)
+      e.target.value = ''
+    }}
+  />
+
+  <input
+    ref={jsonRef}
+    type="file"
+    accept=".json,application/json"
+    hidden
+    onChange={async (e) => {
+      const file = e.target.files?.[0]
+      await handleJSONfile(file)
+      e.target.value = ''
+    }}
+  />
+</div>
       </header>
 
-<section className="kpis">
-  <div className="kpi-card">
-    <div className="label-row">
-      <div className="label">My Spend</div>
-      <select
-        className="kpi-year-select"
-        value={kpiYear}
-        onChange={(e) => setKpiYear(e.target.value)}
-      >
-        {availableYears.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
-    </div>
-    <div className="value">{fmtEUR(kpiMySpend)}</div>
-  </div>
+<section className={isMobile ? 'mobile-kpis' : 'kpis'}>
+  {isMobile ? (
+    <>
+      <div className="mobile-kpi-row">
+        <div className="kpi-card">
+          <div className="label-row">
+            <div className="label">My Spend</div>
+            <select
+              className="kpi-year-select"
+              value={kpiYear}
+              onChange={(e) => setKpiYear(e.target.value)}
+            >
+              {availableYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="value">{fmtEUR(kpiMySpend)}</div>
+        </div>
 
-  <div className="kpi-card">
-    <div className="label-row">
-      <div className="label">Transactions</div>
-      <select
-        className="kpi-year-select"
-        value={kpiYear}
-        onChange={(e) => setKpiYear(e.target.value)}
-      >
-        {availableYears.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
-    </div>
-    <div className="value">{fmtInt(kpiTransactionCount)}</div>
-  </div>
+        <div className="kpi-card">
+          <div className="label-row">
+            <div className="label">Joint Spend</div>
+            <select
+              className="kpi-year-select"
+              value={kpiYear}
+              onChange={(e) => setKpiYear(e.target.value)}
+            >
+              {availableYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="value">{fmtEUR(kpiJointSpend)}</div>
+        </div>
+      </div>
 
-  <div className="kpi-card">
-    <div className="label-row">
-      <div className="label">Categories</div>
-      <select
-        className="kpi-year-select"
-        value={kpiYear}
-        onChange={(e) => setKpiYear(e.target.value)}
-      >
-        {availableYears.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
-    </div>
-    <div className="value">{fmtInt(kpiCategoryCount)}</div>
-  </div>
+      <div className="mobile-kpi-row">
+        <div className="kpi-card accent mobile-kpi-full">
+          <div className="label-row">
+            <div className="label">{splitBalanceLabel}</div>
+            <button type="button" className="btn btn-small" onClick={handlePDF}>
+              PDF
+            </button>
+          </div>
+          <div className="value">{fmtEUR(splitBalanceValue)}</div>
+        </div>
+      </div>
+    </>
+  ) : (
+    <>
+      <div className="kpi-card">
+        <div className="label-row">
+          <div className="label">My Spend</div>
+          <select
+            className="kpi-year-select"
+            value={kpiYear}
+            onChange={(e) => setKpiYear(e.target.value)}
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="value">{fmtEUR(kpiMySpend)}</div>
+      </div>
 
-  <div className="kpi-card">
-    <div className="label-row">
-      <div className="label">Joint Spend (full)</div>
-      <select
-        className="kpi-year-select"
-        value={kpiYear}
-        onChange={(e) => setKpiYear(e.target.value)}
-      >
-        {availableYears.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
-    </div>
-    <div className="value">{fmtEUR(kpiJointSpend)}</div>
-  </div>
+      <div className="kpi-card">
+        <div className="label-row">
+          <div className="label">Transactions</div>
+          <select
+            className="kpi-year-select"
+            value={kpiYear}
+            onChange={(e) => setKpiYear(e.target.value)}
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="value">{fmtInt(kpiTransactionCount)}</div>
+      </div>
 
-  <div className="kpi-card accent">
-    <div className="label">{splitBalanceLabel}</div>
-    <div className="value">{fmtEUR(splitBalanceValue)}</div>
-  </div>
+      <div className="kpi-card">
+        <div className="label-row">
+          <div className="label">Categories</div>
+          <select
+            className="kpi-year-select"
+            value={kpiYear}
+            onChange={(e) => setKpiYear(e.target.value)}
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="value">{fmtInt(kpiCategoryCount)}</div>
+      </div>
+
+      <div className="kpi-card">
+        <div className="label-row">
+          <div className="label">Joint Spend (full)</div>
+          <select
+            className="kpi-year-select"
+            value={kpiYear}
+            onChange={(e) => setKpiYear(e.target.value)}
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="value">{fmtEUR(kpiJointSpend)}</div>
+      </div>
+
+      <div className="kpi-card accent">
+        <div className="label">{splitBalanceLabel}</div>
+        <div className="value">{fmtEUR(splitBalanceValue)}</div>
+      </div>
+    </>
+  )}
 </section>
 
       <nav className="tabs">
