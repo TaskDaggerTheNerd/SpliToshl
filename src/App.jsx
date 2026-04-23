@@ -616,7 +616,7 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
   const getSubscriptionKeyFromDescription = (description) => {
     const d = String(description || '').toLowerCase()
     const m = d.match(
-      /netflix|spotify|prime video|amazon prime|apple tv|apple music|hbo|disney|paramount|youtube|icloud|dropbox|dazn|patreon|subscription/i
+      /netflix|spotify|prime video|amazon prime|hbo|disney|paramount|youtube|icloud|dropbox|dazn|patreon|subscription/i
     )
     if (m) return m[0].toLowerCase()
     const first = d.trim().split(' ')[0]
@@ -625,7 +625,7 @@ const splitTotal = useMemo(() => splitRows.reduce((s, r) => s + r.owed, 0), [spl
 
   const isSubscriptionCandidate = (t) => {
     const d = String(t.description || '')
-    return /netflix|spotify|prime|apple|hbo|disney|subscription|adobe|microsoft|google one|icloud|dropbox|urban sports|revolut|youtube/i.test(
+    return /netflix|spotify|prime|hbo|disney|subscription|adobe|microsoft|google one|icloud|dropbox|urban sports|revolut|youtube/i.test(
       d
     )
   }
