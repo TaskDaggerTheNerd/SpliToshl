@@ -2247,23 +2247,6 @@ async function deleteTransaction(id) {
   >
     Sign in
   </button>
-
-  <div className="login-fields">
-    <input
-      className="field-input login-input"
-      type="text"
-      placeholder="Username"
-      value={loginName}
-      onChange={(e) => setLoginName(e.target.value)}
-    />
-    <input
-      className="field-input login-input"
-      type="password"
-      placeholder="Password"
-      value={loginPassword}
-      onChange={(e) => setLoginPassword(e.target.value)}
-    />
-  </div>
 </>
       )}
     </>
