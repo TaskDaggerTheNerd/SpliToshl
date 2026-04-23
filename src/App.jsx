@@ -2438,7 +2438,14 @@ async function deleteTransaction(id) {
                       <span>{t.category}</span>
                     </div>
                   </div>
-                  <div className="tx-mobile-amount">{fmtEUR(t.amount || 0)}</div>
+                  <div className="tx-mobile-amount">
+  {fmtEUR(t.amount || 0)}
+  {t.isJointShare && (
+    <span className="joint-share-icon" title="Merged from joint transaction">
+      ◎
+    </span>
+  )}
+</div>
                 </div>
               </div>
             ))}
