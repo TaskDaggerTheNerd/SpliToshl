@@ -2408,7 +2408,10 @@ async function deleteTransaction(id) {
                 <BarChart data={ownTabMonthData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" />
-                  <YAxis tickFormatter={(value) => fmtNumber(value)} />
+                  <YAxis
+                    width={72}
+                    tickFormatter={(value) => fmtInt(value)}
+/>
                   <Tooltip formatter={(value) => fmtEUR(value)} />
                   <Bar dataKey="value" fill="var(--color-primary)" radius={[10, 10, 0, 0]} />
                 </BarChart>
@@ -2620,7 +2623,10 @@ async function deleteTransaction(id) {
                 <BarChart data={jointTabMonthData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" />
-                  <YAxis tickFormatter={(value) => fmtNumber(value)} />
+                  <YAxis
+                    width={72}
+                    tickFormatter={(value) => fmtInt(value)}
+/>
                   <Tooltip formatter={(value) => fmtEUR(value)} />
                   <Bar dataKey="value" fill="var(--color-primary)" radius={[10, 10, 0, 0]} />
                 </BarChart>
