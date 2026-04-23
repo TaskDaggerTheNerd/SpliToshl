@@ -1187,6 +1187,7 @@ table {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .mobile-kpi-row {
@@ -1197,4 +1198,6 @@ table {
 
 .mobile-kpi-full {
   grid-column: 1 / -1;
+  width: calc(100% - 1rem);
+  margin: 0 auto;
 }
