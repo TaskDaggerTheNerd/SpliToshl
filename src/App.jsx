@@ -2744,52 +2744,60 @@ async function deleteTransaction(id) {
 
               <div className="panel">
                 <h2>Forecast Details</h2>
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Month</th>
-                        <th>Actual</th>
-                        <th>Projected</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {forecast.series.map((row) => (
-                        <tr key={row.month}>
-                          <td>{row.month}</td>
-                          <td className="amount">{row.actual != null ? fmtEUR(row.actual) : '—'}</td>
-                          <td className="amount">{row.projected != null ? fmtEUR(row.projected) : '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {isMobile ? (
+  <div className="tx-mobile-list">
+    {forecast.series.map((row) => (
+      <div key={row.month} className="tx-mobile-card">
+        <div className="tx-mobile-top">
+          <div className="tx-mobile-main">
+            <div className="tx-mobile-desc">{row.month}</div>
+            <div className="tx-mobile-meta">
+              <span>Actual: {row.actual != null ? fmtEUR(row.actual) : '—'}</span>
+            </div>
+          </div>
+          <div className="tx-mobile-amount">
+            {row.projected != null ? fmtEUR(row.projected) : '—'}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+) : (
+  <div className="table-wrap">
+    <table className="data-table">
+      ...
+    </table>
+  </div>
+)}
               </div>
             </div>
 
             {forecastByCategory.length > 0 && (
               <div className="panel">
                 <h2>Forecast by Category</h2>
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Category</th>
-                        <th>Avg monthly (last 6 months)</th>
-                        <th>Projected next 3 months</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {forecastByCategory.map((row) => (
-                        <tr key={row.category}>
-                          <td>{row.category}</td>
-                          <td className="amount">{fmtEUR(row.avgPerMonth)}</td>
-                          <td className="amount">{fmtEUR(row.projected3)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {isMobile ? (
+  <div className="tx-mobile-list">
+    {forecastByCategory.map((row) => (
+      <div key={row.category} className="tx-mobile-card">
+        <div className="tx-mobile-top">
+          <div className="tx-mobile-main">
+            <div className="tx-mobile-desc">{row.category}</div>
+            <div className="tx-mobile-meta">
+              <span>Avg monthly: {fmtEUR(row.avgPerMonth)}</span>
+            </div>
+          </div>
+          <div className="tx-mobile-amount">{fmtEUR(row.projected3)}</div>
+        </div>
+      </div>
+    ))}
+  </div>
+) : (
+  <div className="table-wrap">
+    <table className="data-table">
+      ...
+    </table>
+  </div>
+)}
 
                 {mostExpensiveCategory && (
                   <p className="subtle-note" style={{ marginTop: '1rem' }}>
@@ -2808,26 +2816,31 @@ async function deleteTransaction(id) {
         ) : (
           <div className="panel">
             <h2>Top Merchants</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Merchant</th>
-                    <th>Spend</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {merchantData.map((row, i) => (
-                    <tr key={row.name}>
-                      <td className="muted">{i + 1}</td>
-                      <td>{row.name}</td>
-                      <td className="amount">{fmtEUR(row.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {isMobile ? (
+  <div className="tx-mobile-list">
+    {merchantData.map((row, i) => (
+      <div key={row.name} className="tx-mobile-card">
+        <div className="tx-mobile-top">
+          <div className="tx-mobile-main">
+            <div className="tx-mobile-desc">
+              {i + 1}. {row.name}
             </div>
+            <div className="tx-mobile-meta">
+              <span>Merchant spend</span>
+            </div>
+          </div>
+          <div className="tx-mobile-amount">{fmtEUR(row.value)}</div>
+        </div>
+      </div>
+    ))}
+  </div>
+) : (
+  <div className="table-wrap">
+    <table className="data-table">
+      ...
+    </table>
+  </div>
+)}
           </div>
         ))}
 
@@ -2839,93 +2852,87 @@ async function deleteTransaction(id) {
         ) : (
           <div className="panel">
             <h2>Subscriptions</h2>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Subscription</th>
-                    <th>Total spent</th>
-                    <th>Last charge</th>
-                    <th>Last charge date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subscriptions.map((t) => {
-                    const isEditing = editingId === t.id
-                    return (
-                      <tr key={t.id} className={isEditing ? 'editing-row' : ''}>
-                        <td>
-                          {isEditing ? (
-                            <input
-                              className="field-input"
-                              type="text"
-                              value={editDraft.description}
-                              placeholder="Subscription"
-                              onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
-                            />
-                          ) : (
-                            t.description || '—'
-                          )}
-                        </td>
-                        <td className="amount">{fmtEUR(t.totalAmount || 0)}</td>
-                        <td className="amount">
-                          {isEditing ? (
-                            <input
-                              className="field-input amount-input"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={editDraft.amount}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, amount: e.target.value }))}
-                            />
-                          ) : (
-                            fmtEUR(t.lastAmount ?? t.amount ?? 0)
-                          )}
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <input
-                              className="field-input"
-                              type="date"
-                              value={editDraft.date}
-                              onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
-                            />
-                          ) : (
-                            t.date
-                          )}
-                        </td>
-                        <td>{t.subscriptionStatus === 'active' ? <span className="muted">Active</span> : <span className="muted">Over currently</span>}</td>
-                        <td>
-                          <div className="row-actions">
-                            {isEditing ? (
-                              <>
-                                <button type="button" className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
-                                  Save
-                                </button>
-                                <button type="button" className="btn btn-small" onClick={cancelEdit}>
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button type="button" className="btn btn-small" onClick={() => startEdit(t)}>
-                                  Edit
-                                </button>
-                                <button type="button" className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
-                                  Delete
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            {isMobile ? (
+  <div className="tx-mobile-list">
+    {subscriptions.map((t) => {
+      const isEditing = editingId === t.id
+      return (
+        <div key={t.id} className={`tx-mobile-card ${isEditing ? 'editing-row' : ''}`.trim()}>
+          <div className="tx-mobile-top">
+            <div className="tx-mobile-main">
+              <div className="tx-mobile-desc">
+                {isEditing ? (
+                  <input
+                    className="field-input"
+                    type="text"
+                    value={editDraft.description}
+                    placeholder="Subscription"
+                    onChange={(e) => setEditDraft((p) => ({ ...p, description: e.target.value }))}
+                  />
+                ) : (
+                  t.description || '—'
+                )}
+              </div>
+
+              <div className="tx-mobile-meta">
+                <span>Total: {fmtEUR(t.totalAmount || 0)}</span>
+              </div>
+
+              <div className="tx-mobile-meta">
+                <span>Last: {isEditing ? fmtEUR(Number(editDraft.amount || 0)) : fmtEUR(t.lastAmount ?? t.amount ?? 0)}</span>
+              </div>
+
+              <div className="tx-mobile-meta">
+                <span>Date: {isEditing ? (
+                  <input
+                    className="field-input"
+                    type="date"
+                    value={editDraft.date}
+                    onChange={(e) => setEditDraft((p) => ({ ...p, date: e.target.value }))}
+                  />
+                ) : (
+                  t.date
+                )}</span>
+              </div>
+
+              <div className="tx-mobile-meta">
+                <span>{t.subscriptionStatus === 'active' ? 'Active' : 'Over currently'}</span>
+              </div>
             </div>
+          </div>
+
+          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {isEditing ? (
+              <>
+                <button type="button" className="btn btn-small btn-primary" onClick={() => saveEdit(t.id)}>
+                  Save
+                </button>
+                <button type="button" className="btn btn-small" onClick={cancelEdit}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn btn-small" onClick={() => startEdit(t)}>
+                  Edit
+                </button>
+                <button type="button" className="btn btn-small btn-danger" onClick={() => deleteTransaction(t.id)}>
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )
+    })}
+  </div>
+) : (
+  <div className="table-wrap">
+    <table className="data-table">
+      ...
+    </table>
+  </div>
+)}
           </div>
         ))}
 
