@@ -2062,13 +2062,149 @@ async function deleteTransaction(id) {
         </div>
 
         <div className="topbar-actions">
-  {isMobile ? (
-    <div className="mobile-home-actions">
-      <div className="mobile-home-topline">
-  <div className="mobile-home-left">
+{isMobile ? (
+  <div className="mobile-home">
+    <div className="mobile-home-topline">
+      <div className="mobile-home-left">
+        <button
+          type="button"
+          className="mobile-mini-card"
+          onClick={() => setDarkMode((v) => !v)}
+          aria-label="Toggle theme"
+          title="Toggle theme"
+        >
+          {darkMode ? <SunIcon /> : <MoonIcon />}
+        </button>
+
+        <button
+          type="button"
+          className="mobile-mini-card"
+          onClick={handleClearAll}
+        >
+          Clear
+        </button>
+
+        <button
+          type="button"
+          className="mobile-mini-card"
+          onClick={handlePDF}
+        >
+          PDF
+        </button>
+      </div>
+
+      <div className="mobile-home-right">
+        {user ? (
+          <>
+            <span className="muted">Signed in as {user.displayName || user.username}</span>
+            <button type="button" className="btn btn-quiet" onClick={signOutUser}>
+              Sign out
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => signInWithNamePassword(loginName, loginPassword)}
+            >
+              Sign in
+            </button>
+
+            <div className="login-fields">
+              <input
+                className="field-input login-input"
+                type="text"
+                placeholder="Username"
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+              />
+              <input
+                className="field-input login-input"
+                type="password"
+                placeholder="Password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+
+    <div className="mobile-home-row mobile-home-row-2">
+      <button
+        type="button"
+        className="mobile-action-card mobile-action-card-green"
+        onClick={() => fileRef.current?.click()}
+      >
+        Import CSV
+      </button>
+
+      <button
+        type="button"
+        className="mobile-action-card mobile-action-card-green"
+        onClick={openManualAdd}
+        title="Add expense"
+        aria-label="Add expense"
+      >
+        +
+      </button>
+    </div>
+
+    <div className="mobile-home-row mobile-home-row-2">
+      <button
+        type="button"
+        className="mobile-mini-card"
+        onClick={() => jsonRef.current?.click()}
+      >
+        Import JSON
+      </button>
+
+      <button
+        type="button"
+        className="mobile-mini-card"
+        onClick={handleExport}
+      >
+        Export JSON
+      </button>
+    </div>
+  </div>
+) : (
+  <>
+    <button type="button" className="btn btn-primary" onClick={() => fileRef.current?.click()}>
+      Import CSV / Excel
+    </button>
+
     <button
       type="button"
-      className="mobile-mini-card"
+      className="btn btn-small-icon"
+      onClick={openManualAdd}
+      title="Add expense"
+      aria-label="Add expense"
+    >
+      +
+    </button>
+
+    <button type="button" className="btn" onClick={() => jsonRef.current?.click()}>
+      Import JSON
+    </button>
+
+    <button type="button" className="btn" onClick={handleExport}>
+      Export JSON
+    </button>
+
+    <button type="button" className="btn" onClick={handlePDF}>
+      Download PDF
+    </button>
+
+    <button type="button" className="btn btn-quiet" onClick={handleClearAll}>
+      Clear
+    </button>
+
+    <button
+      type="button"
+      className="btn btn-theme btn-theme-quiet"
       onClick={() => setDarkMode((v) => !v)}
       aria-label="Toggle theme"
       title="Toggle theme"
@@ -2076,186 +2212,64 @@ async function deleteTransaction(id) {
       {darkMode ? <SunIcon /> : <MoonIcon />}
     </button>
 
-    <button
-      type="button"
-      className="mobile-mini-card"
-      onClick={handleClearAll}
-    >
-      Clear
-    </button>
-
-    <button
-      type="button"
-      className="mobile-mini-card"
-      onClick={handlePDF}
-    >
-      PDF
-    </button>
-  </div>
-
-  <div className="mobile-home-right">
     {user ? (
-  <>
-    <span className="muted">Signed in as {user.displayName || user.username}</span>
-    <button type="button" className="btn btn-quiet" onClick={signOutUser}>
-      Sign out
-    </button>
-  </>
-) : (
-  <>
-    <button
-      type="button"
-      className="btn btn-quiet"
-      onClick={() => signInWithNamePassword(loginName, loginPassword)}
-    >
-      Sign in
-    </button>
-
-    <div className="login-fields">
-      <input
-        className="field-input login-input"
-        type="text"
-        placeholder="Username"
-        value={loginName}
-        onChange={(e) => setLoginName(e.target.value)}
-      />
-      <input
-        className="field-input login-input"
-        type="password"
-        placeholder="Password"
-        value={loginPassword}
-        onChange={(e) => setLoginPassword(e.target.value)}
-      />
-    </div>
+      <>
+        <span className="muted">Signed in as {user.displayName || user.username}</span>
+        <button type="button" className="btn btn-quiet" onClick={signOutUser}>
+          Sign out
+        </button>
+      </>
+    ) : (
+      <div className="login-inline">
+        <input
+          className="field-input login-input"
+          type="text"
+          placeholder="Username"
+          value={loginName}
+          onChange={(e) => setLoginName(e.target.value)}
+        />
+        <input
+          className="field-input login-input"
+          type="password"
+          placeholder="Password"
+          value={loginPassword}
+          onChange={(e) => setLoginPassword(e.target.value)}
+        />
+        <button
+          type="button"
+          className="btn btn-quiet"
+          onClick={() => signInWithNamePassword(loginName, loginPassword)}
+        >
+          Sign in
+        </button>
+      </div>
+    )}
   </>
 )}
-  </div>
-</div>
 
-      <div className="mobile-home-row mobile-home-row-2">
-        <button
-          type="button"
-          className="mobile-action-card mobile-action-card-green"
-          onClick={() => fileRef.current?.click()}
-        >
-          Import CSV
-        </button>
+<input
+  ref={fileRef}
+  type="file"
+  accept=".csv,.xlsx,.xls,text/csv"
+  hidden
+  onChange={async (e) => {
+    const file = e.target.files?.[0]
+    await handleFile(file)
+    e.target.value = ''
+  }}
+/>
 
-        <button
-          type="button"
-          className="mobile-action-card mobile-action-card-green"
-          onClick={openManualAdd}
-          title="Add expense"
-          aria-label="Add expense"
-        >
-          +
-        </button>
-      </div>
-
-      <div className="mobile-home-row mobile-home-row-2">
-        <button
-          type="button"
-          className="mobile-mini-card"
-          onClick={() => jsonRef.current?.click()}
-        >
-          Import JSON
-        </button>
-
-        <button
-          type="button"
-          className="mobile-mini-card"
-          onClick={handleExport}
-        >
-          Export JSON
-        </button>
-      </div>
-    </div>
-  ) : (
-    <>
-      <button type="button" className="btn btn-primary" onClick={() => fileRef.current?.click()}>
-        Import CSV / Excel
-      </button>
-
-      <button
-        type="button"
-        className="btn btn-small-icon"
-        onClick={openManualAdd}
-        title="Add expense"
-        aria-label="Add expense"
-      >
-        +
-      </button>
-
-      <button type="button" className="btn" onClick={() => jsonRef.current?.click()}>
-        Import JSON
-      </button>
-
-      <button type="button" className="btn" onClick={handleExport}>
-        Export JSON
-      </button>
-
-      <button type="button" className="btn" onClick={handlePDF}>
-        Download PDF
-      </button>
-
-      <button type="button" className="btn btn-quiet" onClick={handleClearAll}>
-        Clear
-      </button>
-
-      <button
-        type="button"
-        className="btn btn-theme btn-theme-quiet"
-        onClick={() => setDarkMode((v) => !v)}
-        aria-label="Toggle theme"
-        title="Toggle theme"
-      >
-        {darkMode ? <SunIcon /> : <MoonIcon />}
-      </button>
-
-      {user ? (
-        <>
-          <span className="muted">Signed in as {user.displayName || user.username}</span>
-          <button type="button" className="btn btn-quiet" onClick={signOutUser}>
-            Sign out
-          </button>
-        </>
-      ) : (
-        <>
-  <button
-    type="button"
-    className="btn btn-quiet"
-    onClick={() => signInWithNamePassword(loginName, loginPassword)}
-  >
-    Sign in
-  </button>
-</>
-      )}
-    </>
-  )}
-
-  <input
-    ref={fileRef}
-    type="file"
-    accept=".csv,.xlsx,.xls,text/csv"
-    hidden
-    onChange={async (e) => {
-      const file = e.target.files?.[0]
-      await handleFile(file)
-      e.target.value = ''
-    }}
-  />
-
-  <input
-    ref={jsonRef}
-    type="file"
-    accept=".json,application/json"
-    hidden
-    onChange={async (e) => {
-      const file = e.target.files?.[0]
-      await handleJSONfile(file)
-      e.target.value = ''
-    }}
-  />
+<input
+  ref={jsonRef}
+  type="file"
+  accept=".json,application/json"
+  hidden
+  onChange={async (e) => {
+    const file = e.target.files?.[0]
+    await handleJSONfile(file)
+    e.target.value = ''
+  }}
+/>
 </div>
       </header>
 
