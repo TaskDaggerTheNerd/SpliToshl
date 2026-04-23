@@ -2169,25 +2169,6 @@ async function deleteTransaction(id) {
           Export JSON
         </button>
       </div>
-
-      {!user && (
-        <div className="mobile-login-compact">
-          <input
-            className="field-input login-input"
-            type="text"
-            placeholder="Username"
-            value={loginName}
-            onChange={(e) => setLoginName(e.target.value)}
-          />
-          <input
-            className="field-input login-input"
-            type="password"
-            placeholder="Password"
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-          />
-        </div>
-      )}
     </div>
   ) : (
     <>
