@@ -2095,18 +2095,40 @@ async function deleteTransaction(id) {
 
   <div className="mobile-home-right">
     {user ? (
-      <button type="button" className="mobile-mini-card" onClick={signOutUser}>
-        Sign out
-      </button>
-    ) : (
-      <button
-        type="button"
-        className="mobile-mini-card"
-        onClick={() => signInWithNamePassword(loginName, loginPassword)}
-      >
-        Sign in
-      </button>
-    )}
+  <>
+    <span className="muted">Signed in as {user.displayName || user.username}</span>
+    <button type="button" className="btn btn-quiet" onClick={signOutUser}>
+      Sign out
+    </button>
+  </>
+) : (
+  <>
+    <button
+      type="button"
+      className="btn btn-quiet"
+      onClick={() => signInWithNamePassword(loginName, loginPassword)}
+    >
+      Sign in
+    </button>
+
+    <div className="login-fields">
+      <input
+        className="field-input login-input"
+        type="text"
+        placeholder="Username"
+        value={loginName}
+        onChange={(e) => setLoginName(e.target.value)}
+      />
+      <input
+        className="field-input login-input"
+        type="password"
+        placeholder="Password"
+        value={loginPassword}
+        onChange={(e) => setLoginPassword(e.target.value)}
+      />
+    </div>
+  </>
+)}
   </div>
 </div>
 
@@ -2217,29 +2239,32 @@ async function deleteTransaction(id) {
           </button>
         </>
       ) : (
-        <div className="login-inline">
-          <input
-            className="field-input login-input"
-            type="text"
-            placeholder="Username"
-            value={loginName}
-            onChange={(e) => setLoginName(e.target.value)}
-          />
-          <input
-            className="field-input login-input"
-            type="password"
-            placeholder="Password"
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-          />
-          <button
-            type="button"
-            className="btn btn-quiet"
-            onClick={() => signInWithNamePassword(loginName, loginPassword)}
-          >
-            Log in
-          </button>
-        </div>
+        <>
+  <button
+    type="button"
+    className="btn btn-quiet"
+    onClick={() => signInWithNamePassword(loginName, loginPassword)}
+  >
+    Sign in
+  </button>
+
+  <div className="login-fields">
+    <input
+      className="field-input login-input"
+      type="text"
+      placeholder="Username"
+      value={loginName}
+      onChange={(e) => setLoginName(e.target.value)}
+    />
+    <input
+      className="field-input login-input"
+      type="password"
+      placeholder="Password"
+      value={loginPassword}
+      onChange={(e) => setLoginPassword(e.target.value)}
+    />
+  </div>
+</>
       )}
     </>
   )}
