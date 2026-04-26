@@ -439,85 +439,97 @@ export function generatePDFReport(transactions = []) {
 }
 
 export function generateSplitPDFReport({
+  currentUserId = null,
+  partnerUserId = null,
   currentUserName = 'You',
   partnerUserName = 'Partner',
   mySplitTransactions = [],
   partnerSplitTransactions = [],
-  myOpenSplitTotal = 0,
-  partnerOpenSplitTotal = 0,
-  netSplitBalance = 0,
-  splitBalanceLabel = '',
-  splitBalanceValue = 0,
 } = {}) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const today = new Date().toLocaleDateString('pt-PT')
 
+  const normalizeId = (value) => {
+    if (value == null) return null
+    const n = Number(value)
+    return Number.isFinite(n) ? n : String(value)
+  }
+
+  const baseIdFromRow = (t) => {
+    const rawId = String(t?.id || '')
+    return rawId.replace(/u\d+$/, '').trim()
+  }
+
+  const canonicalKey = (t) =>
+    t?.splitGroupId ||
+    t?.splitgroupid ||
+    `split-${baseIdFromRow(t)}` ||
+    `${t?.date || ''}-${t?.description || ''}-${t?.amount || 0}`
+
   const normalizeRow = (t) => {
     const totalAmount = Math.abs(Number(t?.amount) || 0)
-    const owedAmount = totalAmount / 2
     return {
       id: t?.id || '',
+      key: canonicalKey(t),
       date: t?.date || '—',
       description: t?.description || t?.merchant || '—',
       category: t?.category || 'Other',
       totalAmount,
-      owedAmount,
-      splitDirection: t?.splitDirection || null,
-      splitGroupId: t?.splitGroupId || null,
-      createdByUserId: t?.createdByUserId ?? t?.createdbyuserid ?? null,
+      owedAmount: totalAmount / 2,
+      createdByUserId: normalizeId(t?.createdByUserId ?? t?.createdbyuserid),
+      sharedWithUserId: normalizeId(t?.sharedWithUserId ?? t?.sharedwithuserid),
     }
   }
 
-  const sortRows = (rows) =>
-    rows
-      .slice()
-      .sort((a, b) => {
-        const dateCompare = String(a.date).localeCompare(String(b.date))
-        if (dateCompare !== 0) return dateCompare
-        return String(a.description).localeCompare(String(b.description))
-      })
+  const merged = [...mySplitTransactions, ...partnerSplitTransactions]
+    .filter((t) => t?.split && !t?.splitPaid)
+    .map(normalizeRow)
 
-  const myRows = sortRows(
-    mySplitTransactions
-      .filter((t) => t?.split && !t?.splitPaid)
-      .map(normalizeRow)
+  const uniqueMap = new Map()
+  for (const row of merged) {
+    if (!uniqueMap.has(row.key)) {
+      uniqueMap.set(row.key, row)
+    }
+  }
+
+  const uniqueRows = [...uniqueMap.values()].sort((a, b) => {
+    const dateCompare = String(a.date).localeCompare(String(b.date))
+    if (dateCompare !== 0) return dateCompare
+    return String(a.description).localeCompare(String(b.description))
+  })
+
+  const safeCurrentUserId = normalizeId(currentUserId)
+  const safePartnerUserId = normalizeId(partnerUserId)
+
+  const currentUserRows = uniqueRows.filter(
+    (row) => row.createdByUserId === safeCurrentUserId
   )
 
-  const partnerRows = sortRows(
-    partnerSplitTransactions
-      .filter((t) => t?.split && !t?.splitPaid)
-      .map(normalizeRow)
+  const partnerRows = uniqueRows.filter(
+    (row) => row.createdByUserId === safePartnerUserId
   )
 
-  const myTotalAmount = myRows.reduce((sum, row) => sum + row.totalAmount, 0)
-  const myTotalOwed = myRows.reduce((sum, row) => sum + row.owedAmount, 0)
+  const unknownRows = uniqueRows.filter(
+    (row) =>
+      row.createdByUserId !== safeCurrentUserId &&
+      row.createdByUserId !== safePartnerUserId
+  )
+
+  const currentUserTotalAmount = currentUserRows.reduce((sum, row) => sum + row.totalAmount, 0)
+  const currentUserTotalOwed = currentUserRows.reduce((sum, row) => sum + row.owedAmount, 0)
 
   const partnerTotalAmount = partnerRows.reduce((sum, row) => sum + row.totalAmount, 0)
   const partnerTotalOwed = partnerRows.reduce((sum, row) => sum + row.owedAmount, 0)
 
-  const myRowsOwedToMe = myRows.filter((row) => row.splitDirection === 'owedtome')
-  const myRowsIOwe = myRows.filter((row) => row.splitDirection === 'iowe')
+  const netBalance = currentUserTotalOwed - partnerTotalOwed
+  const absNetBalance = Math.abs(netBalance)
 
-  const totalOwedToMe = myRowsOwedToMe.reduce((sum, row) => sum + row.owedAmount, 0)
-  const totalIOwe = myRowsIOwe.reduce((sum, row) => sum + row.owedAmount, 0)
-
-  const effectiveNetBalance = totalOwedToMe - totalIOwe
-  const effectiveAbsBalance = Math.abs(effectiveNetBalance)
-
-  const effectiveBalanceLabel =
-    effectiveNetBalance > 0.004
+  const balanceLabel =
+    netBalance > 0.004
       ? `${partnerUserName} owes ${currentUserName}`
-      : effectiveNetBalance < -0.004
+      : netBalance < -0.004
         ? `${currentUserName} owes ${partnerUserName}`
         : 'You are settled'
-
-  const summaryLines = [
-    `${currentUserName} split total owed amount: ${fmtEUR(myTotalOwed)}`,
-    `${partnerUserName} split total owed amount: ${fmtEUR(partnerTotalOwed)}`,
-    `${currentUserName} is owed: ${fmtEUR(totalOwedToMe)}`,
-    `${currentUserName} owes: ${fmtEUR(totalIOwe)}`,
-    `${effectiveBalanceLabel}: ${fmtEUR(effectiveAbsBalance)}`,
-  ]
 
   addHeader(doc, 'Split overview', `Generated ${today}`)
 
@@ -532,12 +544,22 @@ export function generateSplitPDFReport({
   doc.setFontSize(9)
   doc.setTextColor(...MUTED)
   doc.text(
-    'This report includes your split expenses, your partner split expenses, and the net balance of who owes who.',
+    'This report includes split expenses grouped by the user who created each split, plus the final net balance.',
     PAGE.mx,
     y,
     { maxWidth: PAGE.w - PAGE.mx * 2 }
   )
   y += 10
+
+  const summaryLines = [
+    `${currentUserName} split total owed amount: ${fmtEUR(currentUserTotalOwed)}`,
+    `${partnerUserName} split total owed amount: ${fmtEUR(partnerTotalOwed)}`,
+    `${balanceLabel}: ${fmtEUR(absNetBalance)}`,
+  ]
+
+  if (unknownRows.length) {
+    summaryLines.push(`Unassigned split rows excluded from balance: ${unknownRows.length}`)
+  }
 
   y = addInsightBox(doc, 'Balance summary', summaryLines, y, TEAL_SOFT)
 
@@ -545,16 +567,16 @@ export function generateSplitPDFReport({
     doc,
     `${currentUserName} split expenses`,
     [['Date', 'Description', 'Category', 'Total Amount', 'Owed Amount']],
-    myRows.length
+    currentUserRows.length
       ? [
-          ...myRows.map((row) => [
+          ...currentUserRows.map((row) => [
             row.date,
             row.description,
             row.category,
             fmtEUR(row.totalAmount),
             fmtEUR(row.owedAmount),
           ]),
-          ['Total', '', '', fmtEUR(myTotalAmount), fmtEUR(myTotalOwed)],
+          ['Total', '', '', fmtEUR(currentUserTotalAmount), fmtEUR(currentUserTotalOwed)],
         ]
       : [['—', 'No split transactions found', '—', '—', '—']],
     y,
@@ -611,29 +633,14 @@ export function generateSplitPDFReport({
     y = 28
   }
 
-  const netRowsDetail = [
-    ...myRowsOwedToMe.map((row) => [
-      `${partnerUserName} owes ${currentUserName}`,
-      `${row.date} · ${row.description}`,
-      fmtEUR(row.owedAmount),
-    ]),
-    ...myRowsIOwe.map((row) => [
-      `${currentUserName} owes ${partnerUserName}`,
-      `${row.date} · ${row.description}`,
-      fmtEUR(row.owedAmount),
-    ]),
-  ]
-
   y = addTable(
     doc,
     'Net balance',
     [['Item', 'Amount']],
     [
-      [`${currentUserName} total owed amount`, fmtEUR(myTotalOwed)],
+      [`${currentUserName} total owed amount`, fmtEUR(currentUserTotalOwed)],
       [`${partnerUserName} total owed amount`, fmtEUR(partnerTotalOwed)],
-      [`${currentUserName} is owed`, fmtEUR(totalOwedToMe)],
-      [`${currentUserName} owes ${partnerUserName}`, fmtEUR(totalIOwe)],
-      [effectiveBalanceLabel, fmtEUR(effectiveAbsBalance)],
+      [balanceLabel, fmtEUR(absNetBalance)],
     ],
     y,
     {
@@ -645,7 +652,7 @@ export function generateSplitPDFReport({
     }
   )
 
-  if (netRowsDetail.length) {
+  if (unknownRows.length) {
     if (y > 220) {
       doc.addPage()
       addHeader(doc, 'Split overview', `Generated ${today}`)
@@ -654,16 +661,22 @@ export function generateSplitPDFReport({
 
     y = addTable(
       doc,
-      'Expenses included in net balance',
-      [['Direction', 'Expense', 'Amount']],
-      netRowsDetail,
+      'Excluded rows',
+      [['Date', 'Description', 'Category', 'Reason']],
+      unknownRows.map((row) => [
+        row.date,
+        row.description,
+        row.category,
+        'createdByUserId did not match current or partner user',
+      ]),
       y,
       {
         styles: { fontSize: 8 },
         columnStyles: {
-          0: { cellWidth: 42 },
-          1: { cellWidth: 104 },
-          2: { halign: 'right', cellWidth: 28 },
+          0: { cellWidth: 24 },
+          1: { cellWidth: 62 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 66 },
         },
       }
     )

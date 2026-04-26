@@ -1670,6 +1670,8 @@ async function handleJointToggle(tx) {
 
   function handleSplitPDF() {
   generateSplitPDFReport({
+    currentUserId: user?.id,
+    partnerUserId: partnerUser?.id,
     currentUserName: user?.displayName || user?.username || 'You',
     partnerUserName: partnerUser?.displayName || partnerUser?.username || 'Partner',
     mySplitTransactions: myOpenSplitTransactions,
