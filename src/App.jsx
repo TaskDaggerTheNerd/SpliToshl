@@ -582,8 +582,8 @@ const myOpenSplitTotal = useMemo(
 
 // Net: positive = partner owes you, negative = you owe partner
 const netSplitBalance = useMemo(
-  () => myOpenSplitTotal - partnerOpenSplitTotal,
-  [myOpenSplitTotal, partnerOpenSplitTotal]
+  () => myOpenSplitTotal,
+  [myOpenSplitTotal]
 )
 
 const splitBalanceLabel = useMemo(() => {
