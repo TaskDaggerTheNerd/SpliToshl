@@ -1239,6 +1239,145 @@ async function deleteTransactionFromCloud(id, currentUser) {
   return error
 }
 
+async function updateLinkedTransactionInCloud(tx, currentUser) {
+  if (!currentUser?.id) return { error: new Error('No user logged in.') }
+
+  const baseId = String(tx.id || '').replace(/__u[12]$/, '')
+  const partnerId = getPartnerUserId(currentUser)
+  const shouldSyncPartner = Boolean(tx.split || tx.joint || tx.account === 'joint')
+
+  const myPayload = {
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant,
+    amount: tx.amount,
+    category: tx.category,
+    split: tx.split,
+    splitpaid: tx.splitPaid,
+    joint: tx.joint,
+    joint_mode: tx.jointMode || null,
+    account: tx.account || 'personal',
+    joint_group_id: tx.jointGroupId || null,
+    created_by_user_id: tx.createdByUserId || null,
+    shared_with_user_id: shouldSyncPartner ? partnerId : null,
+    split_direction: tx.split
+      ? (tx.createdByUserId === currentUser.id ? 'owed_to_me' : 'i_owe')
+      : null,
+    split_group_id: tx.split ? (tx.splitGroupId || makeSplitGroupId(tx)) : null,
+  }
+
+  const { error: myError } = await supabase
+    .from('transactions')
+    .update(myPayload)
+    .eq('userid', currentUser.id)
+    .eq('id', baseId)
+
+  if (myError) return { error: myError }
+
+  if (!shouldSyncPartner || !partnerId) {
+    return { error: null }
+  }
+
+  const partnerRowId = `${baseId}__u${partnerId}`
+
+  const partnerPayload = {
+    id: partnerRowId,
+    userid: partnerId,
+    date: tx.date,
+    description: tx.description,
+    merchant: tx.merchant,
+    amount: tx.amount,
+    category: tx.category,
+    split: tx.split,
+    splitpaid: tx.splitPaid,
+    joint: tx.joint,
+    joint_mode: tx.jointMode || null,
+    account: tx.account || 'personal',
+    joint_group_id: tx.jointGroupId || null,
+    created_by_user_id: tx.createdByUserId || currentUser.id,
+    shared_with_user_id: currentUser.id,
+    split_direction: tx.split
+      ? (tx.createdByUserId === currentUser.id ? 'i_owe' : 'owed_to_me')
+      : null,
+    split_group_id: tx.split ? (tx.splitGroupId || makeSplitGroupId(tx)) : null,
+  }
+
+  const { data: existingPartnerRow, error: findError } = await supabase
+    .from('transactions')
+    .select('id')
+    .eq('userid', partnerId)
+    .eq('id', partnerRowId)
+    .limit(1)
+
+  if (findError) return { error: findError }
+
+  if (existingPartnerRow && existingPartnerRow.length > 0) {
+    const { error: partnerUpdateError } = await supabase
+      .from('transactions')
+      .update({
+        date: partnerPayload.date,
+        description: partnerPayload.description,
+        merchant: partnerPayload.merchant,
+        amount: partnerPayload.amount,
+        category: partnerPayload.category,
+        split: partnerPayload.split,
+        splitpaid: partnerPayload.splitpaid,
+        joint: partnerPayload.joint,
+        joint_mode: partnerPayload.joint_mode,
+        account: partnerPayload.account,
+        joint_group_id: partnerPayload.joint_group_id,
+        created_by_user_id: partnerPayload.created_by_user_id,
+        shared_with_user_id: partnerPayload.shared_with_user_id,
+        split_direction: partnerPayload.split_direction,
+        split_group_id: partnerPayload.split_group_id,
+      })
+      .eq('userid', partnerId)
+      .eq('id', partnerRowId)
+
+    if (partnerUpdateError) return { error: partnerUpdateError }
+  } else {
+    const { error: partnerInsertError } = await supabase
+      .from('transactions')
+      .insert(partnerPayload)
+
+    if (partnerInsertError) return { error: partnerInsertError }
+  }
+
+  return { error: null }
+}
+
+async function deleteLinkedTransactionFromCloud(tx, currentUser) {
+  if (!currentUser?.id) return { error: new Error('No user logged in.') }
+
+  const baseId = String(tx.id || '').replace(/__u[12]$/, '')
+  const partnerId = getPartnerUserId(currentUser)
+  const shouldDeletePartner = Boolean(tx.split || tx.joint || tx.account === 'joint')
+
+  const { error: myError } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('userid', currentUser.id)
+    .eq('id', baseId)
+
+  if (myError) return { error: myError }
+
+  if (!shouldDeletePartner || !partnerId) {
+    return { error: null }
+  }
+
+  const partnerRowId = `${baseId}__u${partnerId}`
+
+  const { error: partnerError } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('userid', partnerId)
+    .eq('id', partnerRowId)
+
+  if (partnerError) return { error: partnerError }
+
+  return { error: null }
+}
+
   function importRows(rows, label) {
     const hasAccountFlag = rows.some((r) => r.account)
     if (hasAccountFlag) finishImport(rows, label, null)
@@ -1947,12 +2086,15 @@ async function saveEdit(id) {
 }
 
   if (user) {
-    const error = await updateTransactionInCloud(updatedTransaction, user)
-    if (error) {
-      setStatus(`Cloud save failed: ${error.message}`)
-      return
-    }
+  const { error } = await updateLinkedTransactionInCloud(updatedTransaction, user)
+  if (error) {
+    setStatus('Cloud save failed: ' + error.message)
+    return
   }
+
+  await loadTransactionsFromCloud(user)
+  await loadPartnerData(user)
+}
 
   const categoryChanged = original.category !== (editDraft.category || 'Other')
   const originalDescription = original.description
@@ -1989,19 +2131,27 @@ async function saveEdit(id) {
 }
 
 async function deleteTransaction(id) {
-  if (user) {
-    const error = await deleteTransactionFromCloud(id, user)
-    if (error) {
-      setStatus(`Cloud delete failed: ${error.message}`)
-      return
-    }
+  const tx = transactions.find((t) => t.id === id)
+  if (!tx) {
+    setStatus('Transaction not found.')
+    return
   }
 
-  setTransactions((prev) => prev.filter((t) => t.id !== id))
+  if (user) {
+    const { error } = await deleteLinkedTransactionFromCloud(tx, user)
+    if (error) {
+      setStatus('Cloud delete failed: ' + error.message)
+      return
+    }
+
+    await loadTransactionsFromCloud(user)
+    await loadPartnerData(user)
+  } else {
+    setTransactions((prev) => prev.filter((t) => t.id !== id))
+  }
 
   if (editingId === id) cancelEdit()
-
-  setStatus(user ? 'Transaction deleted and removed online.' : 'Transaction deleted.')
+  setStatus(user ? 'Transaction deleted for both users.' : 'Transaction deleted.')
 }
 
   const forecastByCategory = useMemo(() => {
